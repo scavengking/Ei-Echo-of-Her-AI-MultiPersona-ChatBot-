@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ei- Echo of Her</title>
+    <link href="/static/css/styles.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+
+    <style>
+        /* Basic styling for chat bubbles - can be expanded with Tailwind */
+        .chat-bubble {
+            padding: 10px 15px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .user-bubble {
+            background-color: #A78BFA; /* Tailwind violet-400 */
+            color: white;
+            margin-left: auto; /* Aligns to the right */
+            border-bottom-right-radius: 5px;
+        }
+        .ei-bubble {
+            background-color: #C4B5FD; /* Tailwind violet-300 */
+            color: #37304A; /* Darker violet for text */
+            margin-right: auto; /* Aligns to the left */
+            border-bottom-left-radius: 5px;
+        }
+        /* Scrollbar styling for chat messages (optional, for aesthetics) */
+        #chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #chat-messages::-webkit-scrollbar-thumb {
+            background-color: rgba(139, 92, 246, 0.5); /* violet-500 with opacity */
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-violet-900 text-gray-200 font-['Inter',_sans-serif] flex flex-col h-screen">
+
+    <div id="celestial-fragment-container" class="fixed top-4 left-4 md:top-8 md:left-8 w-16 h-16 md:w-24 md:h-24 z-0">
+        <svg id="celestial-fragment-svg" viewBox="0 0 100 100" style="overflow: visible;">
+            <defs>
+                <radialGradient id="fragmentCoreGradient" cx="50%" cy="50%" r="70%" fx="50%" fy="50%">
+                    <stop offset="0%" style="stop-color:rgba(230, 220, 255, 0.9);" />
+                    <stop offset="50%" style="stop-color:rgba(200, 180, 240, 0.7);" />
+                    <stop offset="100%" style="stop-color:rgba(150, 130, 200, 0.4);" />
+                </radialGradient>
+                <filter id="softGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                    <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+                <radialGradient id="particleGradient" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" style="stop-color:rgba(240, 230, 255, 1);" />
+                    <stop offset="100%" style="stop-color:rgba(200, 190, 230, 0.5);" />
+                </radialGradient>
+            </defs>
+            <g id="fragment-shape-group" filter="url(#softGlowFilter)">
+                <path id="fragment-main" d="M50 15 L70 35 L65 65 L45 70 L30 50 L35 25 Z" fill="url(#fragmentCoreGradient)" />
+                <path id="fragment-inner" d="M50 25 L60 40 L55 55 L45 50 L40 35 Z" fill="rgba(240, 230, 255, 0.3)" opacity="0.7"/>
+            </g>
+            <circle id="particle-1" cx="30" cy="30" r="1.5" fill="url(#particleGradient)" opacity="0"/>
+            <circle id="particle-2" cx="70" cy="60" r="1" fill="url(#particleGradient)" opacity="0"/>
+            <circle id="particle-3" cx="50" cy="80" r="1.2" fill="url(#particleGradient)" opacity="0"/>
+        </svg>
+    </div>
+
+    <div id="welcome-message-container" class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none z-10 transition-opacity duration-1000 ease-in-out">
+        <h1 id="poetic-welcome" class="text-3xl md:text-4xl font-serif mb-4" style="opacity: 0; color: #e6e0ff;"></h1>
+        <p id="project-quote" class="text-lg md:text-xl italic" style="opacity: 0; color: #d0c0f0;"></p>
+    </div>
+
+    <div id="chat-ui-container" class="flex flex-col flex-grow h-full p-4 md:p-6 opacity-0 transition-opacity duration-1000 ease-in-out" style="padding-top: calc(2rem + 96px + 2rem);"> <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-800/30 backdrop-blur-sm rounded-lg shadow-xl mb-4">
+            </div>
+
+        <div id="typing-indicator" class="h-6 mb-2 text-sm text-violet-300 italic" style="display: none;">
+            Ei is typing...
+        </div>
+
+        <form id="chat-form" class="flex items-center space-x-3">
+            <input type="text" id="message-input" placeholder="Whisper your thoughts to Ei..." class="flex-grow p-3 bg-slate-700/50 border border-violet-600/50 rounded-lg focus:ring-2 focus:ring-violet-400 focus:border-transparent outline-none placeholder-violet-300/70 text-gray-100 shadow-md">
+            <button type="submit" id="send-button" class="p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow-md transition-colors duration-150">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6">
+                    <path d="M3.105 3.105a1.5 1.5 0 012.122-.001L19.43 11.192a.75.75 0 010 1.116L5.227 16.9a1.5 1.5 0 01-2.122-.001 1.5 1.5 0 01-.001-2.122L14.192 11.75 3.105 5.227a1.5 1.5 0 01-.001-2.122z" />
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
