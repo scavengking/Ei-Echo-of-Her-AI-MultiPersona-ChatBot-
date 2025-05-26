@@ -7,6 +7,7 @@
     <link href="/static/css/styles.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/8.3.2/uuid.min.js"></script>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
 
     <style>
         body {
@@ -29,9 +30,6 @@
             pointer-events: none;
         }
         .chat-bubble { padding: 10px 15px; border-radius: 20px; margin-bottom: 10px; max-width: 70%; word-wrap: break-word; }
-        .user-bubble { background-color: #A78BFA; color: white; margin-left: auto; border-bottom-right-radius: 5px; }
-        .ei-bubble { background-color: #C4B5FD; color: #37304A; margin-right: auto; border-bottom-left-radius: 5px; }
-
         #chat-messages::-webkit-scrollbar { width: 6px; }
         #chat-messages::-webkit-scrollbar-track { background: transparent; }
         #chat-messages::-webkit-scrollbar-thumb { background-color: rgba(139, 92, 246, 0.5); border-radius: 20px; }
@@ -59,7 +57,7 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         #history-panel-toggle:hover { background-color: rgba(109, 40, 217, 0.9); }
-        #history-panel.open + #history-panel-toggle { left: 295px; }
+        #history-panel.open + #history-panel-toggle { left: 295px; } /* Adjusted for new panel width */
         #history-list { list-style: none; padding: 0; margin-top: 1rem; overflow-y: auto; flex-grow: 1; }
         #history-list::-webkit-scrollbar { width: 5px; }
         #history-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
@@ -74,35 +72,160 @@
         .history-item-timestamp { font-size: 0.7rem; color: #a090c0; display: block; }
         #new-chat-button-container { padding-top: 1rem; border-top: 1px solid rgba(167, 139, 250, 0.2); }
 
+
         #main-content-area {
             flex-grow: 1; display: flex; flex-direction: column; height: 100vh;
             transition: margin-left 0.4s ease-in-out; position: relative;
         }
         #history-panel.open ~ #main-content-area { margin-left: 280px; }
 
-        /* New Styling for Empty Session Placeholder */
         #empty-session-placeholder {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -70%); /* Adjust vertical centering slightly */
             text-align: center;
-            color: rgba(229, 231, 235, 0.6); /* Lighter text color */
-            font-size: 1.5rem; /* Larger font */
+            color: rgba(229, 231, 235, 0.6);
+            font-size: 1.5rem;
             font-style: italic;
             padding: 2rem;
             border-radius: 0.5rem;
-            /* background-color: rgba(30, 41, 59, 0.3); Semi-transparent background */
-            /* backdrop-filter: blur(2px); */
-            z-index: 5; /* Above chat messages but below typing indicator/input if needed */
-            pointer-events: none; /* Allow clicks to pass through if necessary */
-            display: none; /* Initially hidden */
+            z-index: 5;
+            pointer-events: none;
+            display: none;
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
+            width: 100%;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
         }
-         #empty-session-placeholder.visible {
+        #empty-session-placeholder.visible {
             display: block;
             opacity: 1;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: max-content;
+            max-width: 200px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px; /* Adjust if needed based on tooltip width */
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.75rem;
+            white-space: normal;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        #earned-badges-container {
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            display: flex; 
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center; 
+            padding-bottom: 0.5rem;
+        }
+        .badge-item {
+             cursor: default;
+        }
+        
+        /* Styles for Ei's Avatar and Name Display */
+        #ei-chat-header {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.25rem; /* Reduced horizontal padding */
+            margin-bottom: 0.5rem;
+            /* border-bottom: 1px solid rgba(167, 139, 250, 0.15); */ /* Optional subtle separator */
+        }
+        #ei-avatar-container { /* Container for Ei's model-viewer */
+            width: 60px;  /* Or your desired size */
+            height: 60px; /* Or your desired size */
+            border-radius: 50%;
+            overflow: hidden; /* Crucial for rounded model-viewer */
+            margin-right: 0.75rem; /* Space between avatar and name (Tailwind's space-x-3 equivalent) */
+            background-color: rgba(124, 58, 237, 0.1); /* Soft placeholder while model loads */
+            flex-shrink: 0; /* Prevent shrinking if name is long */
+        }
+        #ei-avatar-model-viewer { /* Ei's model-viewer specific styles */
+            width: 100%;
+            height: 100%;
+            --mv-interaction-prompt: none; /* Hide the "Drag to rotate" prompt */
+            background-color: transparent; /* Ensure model-viewer background is transparent */
+        }
+        #ei-name-display {
+            font-size: 1.125rem; /* Tailwind text-lg */
+            font-weight: 600;    /* Tailwind font-semibold */
+            color: #e0e0ff;      /* A light violet/blueish tone */
+            text-shadow: 0 0 8px rgba(220, 200, 255, 0.5);
+        }
+
+
+        /* RPM Modal and User Avatar styles */
+        #rpm-modal {
+            display: none; 
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.85); 
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            z-index: 100; 
+            justify-content: center; align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+        #rpm-modal.visible { display: flex; opacity: 1; }
+        #rpm-iframe-container {
+            width: 90%; height: 90%;
+            max-width: 500px; max-height: 700px;
+            background-color: #2d3748; 
+            border-radius: 0.75rem; 
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.2), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            overflow: hidden; position: relative;
+        }
+        #rpm-iframe { width: 100%; height: 100%; border: none; }
+        #close-rpm-modal-button {
+            position: absolute; top: 10px; right: 10px;
+            background-color: rgba(255, 255, 255, 0.2); color: white;
+            border: none; border-radius: 50%;
+            width: 30px; height: 30px; font-size: 1.2rem; line-height: 30px;
+            text-align: center; cursor: pointer; z-index: 101; 
+        }
+        #create-user-avatar-button-container {
+            padding-bottom: 1rem; /* Space below the button in history panel */
+        }
+
+        #user-avatar-chat-display { /* Container for user's RPM avatar */
+            width: 40px; 
+            height: 40px;
+            border-radius: 50%;
+            background-color: rgba(167, 139, 250, 0.1); 
+            margin-right: 0.75rem; 
+            overflow: hidden; 
+            flex-shrink: 0;
+        }
+        #user-avatar-chat-display model-viewer { /* User's model-viewer */
+            width: 100%;
+            height: 100%;
+            --mv-interaction-prompt: none; 
+            background-color: transparent;
+        }
+        #gamification-stats-inline {
+            padding: 0.5rem 0;
+            display: flex;
+            justify-content: space-around;
+            /* Further styling if needed */
         }
 
     </style>
@@ -110,6 +233,7 @@
 <body class="text-gray-200 font-['Inter',_sans-serif]">
 
     <canvas id="particle-canvas"></canvas>
+
     <div id="history-panel">
         <h3 class="text-xl font-semibold text-violet-300 mb-4">Chat Sessions</h3>
         <div id="new-chat-button-container">
@@ -118,11 +242,29 @@
                 New Chat
             </button>
         </div>
-        <ul id="history-list"></ul>
+        <div id="create-user-avatar-button-container">
+            <button id="create-user-avatar-button" class="w-full p-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg shadow-md transition-colors duration-150 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" />
+                </svg>
+                My Avatar
+            </button>
+        </div>
+        <ul id="history-list">
+            </ul>
     </div>
     <button id="history-panel-toggle">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
+        </svg>
     </button>
+
+    <div id="rpm-modal">
+        <div id="rpm-iframe-container">
+            <button id="close-rpm-modal-button">&times;</button>
+            <iframe id="rpm-iframe" src="" allow="camera *; microphone *; autoplay *; display-capture *; clipboard-write *"></iframe>
+        </div>
+    </div>
 
     <div id="main-content-area">
         <div id="celestial-fragment-container" class="fixed top-4 left-4 md:top-8 md:left-8 w-16 h-16 md:w-24 md:h-24 z-0">
@@ -134,27 +276,54 @@
             <p id="project-quote" class="text-lg md:text-xl italic" style="opacity: 0; color: #d0c0f0;"></p>
         </div>
 
-        <div id="persona-selection-screen" class="flex">
-            <h2 id="persona-selection-title">Choose an Echo of Ei...</h2>
+        <div id="persona-selection-screen" class="flex"> <h2 id="persona-selection-title">Choose an Echo of Ei...</h2>
             <div class="persona-cards-container">
-            <div class="persona-card" data-persona="friendly"><div class="emoji"></div><div class="name">Friendly Assistant</div></div>
-            <div class="persona-card" data-persona="sage"><div class="emoji">ｧ</div><div class="name">Wise Sage</div></div>
-            <div class="persona-card" data-persona="coding"><div class="emoji">捗</div><div class="name">Coding Mentor</div></div>
-            <div class="persona-card" data-persona="sarcastic"><div class="emoji"></div><div class="name">Sarcastic Comedian</div></div>
-            <div class="persona-card" data-persona="scifi"><div class="emoji">､</div><div class="name">Sci-Fi Bot</div></div>
-        </div>
+                <div class="persona-card" data-persona="friendly"><div class="emoji">🤗</div><div class="name">Friendly Assistant</div></div>
+                <div class="persona-card" data-persona="sage"><div class="emoji">🦉</div><div class="name">Wise Sage</div></div>
+                <div class="persona-card" data-persona="coding"><div class="emoji">💻</div><div class="name">Coding Mentor</div></div>
+                <div class="persona-card" data-persona="sarcastic"><div class="emoji">😏</div><div class="name">Sarcastic Comedian</div></div>
+                <div class="persona-card" data-persona="scifi"><div class="emoji">🤖</div><div class="name">Sci-Fi Bot</div></div>
+            </div>
         </div>
 
         <div id="chat-ui-container" class="flex flex-col flex-grow h-full p-4 md:p-6 opacity-0 transition-opacity duration-1000 ease-in-out" style="display: none; padding-top: 1rem; position: relative; z-index: 1;">
             
-            <div id="empty-session-placeholder">
-                This session is empty. <br> Whisper your thoughts to Ei...
+            <div id="ei-chat-header">
+                <div id="ei-avatar-container">
+                    <model-viewer id="ei-avatar-model-viewer"
+                                  src="" 
+                                  alt="Ei Avatar"
+                                  camera-controls
+                                  touch-action="pan-y"
+                                  disable-zoom
+                                  interaction-prompt="none"
+                                  shadow-intensity="1"
+                                  auto-rotate
+                                  camera-orbit="0deg 75deg 105%" 
+                                  style="background-color: transparent;">
+                    </model-viewer>
+                </div>
+                <div id="ei-name-display">Ei</div>
+            </div>
+            
+            <div id="empty-session-placeholder"> This session is empty. <br> Whisper your thoughts to Ei...
             </div>
 
+            <div id="gamification-stats-inline">
+                </div>
+            <div id="earned-badges-container">
+                </div>
+
+
             <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-4 bg-slate-800/30 backdrop-blur-sm rounded-lg shadow-xl mb-4">
-            </div>
+                </div>
+
             <div id="typing-indicator" class="h-6 mb-2 text-sm text-violet-300 italic" style="display: none;"> Ei is typing... </div>
+            
             <form id="chat-form" class="flex items-center space-x-3">
+                <div id="user-avatar-chat-display">
+                    <model-viewer id="user-avatar-model" src="" alt="Your Avatar" camera-controls touch-action="pan-y" disable-zoom interaction-prompt="none" shadow-intensity="1" style="background-color: transparent;"></model-viewer>
+                </div>
                 <input type="text" id="message-input" placeholder="Whisper your thoughts to Ei..." class="flex-grow p-3 bg-slate-700/50 border border-violet-600/50 rounded-lg focus:ring-2 focus:ring-violet-400 focus:border-transparent outline-none placeholder-violet-300/70 text-gray-100 shadow-md">
                 <button type="submit" id="send-button" class="p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow-md transition-colors duration-150">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path d="M3.105 3.105a1.5 1.5 0 012.122-.001L19.43 11.192a.75.75 0 010 1.116L5.227 16.9a1.5 1.5 0 01-2.122-.001 1.5 1.5 0 01-.001-2.122L14.192 11.75 3.105 5.227a1.5 1.5 0 01-.001-2.122z" /></svg>
@@ -173,7 +342,7 @@
             <div class="text-center mt-1">
                 XP: <span id="xp-current">0</span> / <span id="xp-next-level">100</span>
             </div>
-        </div>
+            </div>
     </div>
 
     <script src="/static/js/main.js"></script>

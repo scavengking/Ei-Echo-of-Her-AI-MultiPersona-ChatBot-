@@ -13,6 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptySessionPlaceholder = document.getElementById('empty-session-placeholder');
     const earnedBadgesContainer = document.getElementById('earned-badges-container');
 
+    // Ei's display elements
+    const eiNameDisplay = document.getElementById('ei-name-display');
+    const eiAvatarModelViewer = document.getElementById('ei-avatar-model-viewer'); // MODIFIED: Get Ei's model-viewer
+
     // Gamification Elements
     const xpLevelEl = document.getElementById('xp-level');
     const xpBarEl = document.getElementById('xp-bar');
@@ -26,11 +30,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const newChatButton = document.getElementById('new-chat-button');
     const mainContentArea = document.getElementById('main-content-area');
 
+    // Ready Player Me Elements
+    const createUserAvatarButton = document.getElementById('create-user-avatar-button');
+    const rpmModal = document.getElementById('rpm-modal');
+    const rpmIframe = document.getElementById('rpm-iframe');
+    const closeRpmModalButton = document.getElementById('close-rpm-modal-button');
+    const userAvatarModelViewer = document.getElementById('user-avatar-model');
+
     // --- STATE VARIABLES ---
     const LS_PERSONA_KEY = 'ei_selected_persona';
     const LS_SESSION_ID_KEY = 'ei_current_session_id';
+    const LS_USER_AVATAR_URL_KEY = 'ei_user_avatar_url';
+
     let currentPersona = localStorage.getItem(LS_PERSONA_KEY) || 'friendly';
     let currentSessionId = localStorage.getItem(LS_SESSION_ID_KEY);
+    let currentUserAvatarUrl = localStorage.getItem(LS_USER_AVATAR_URL_KEY);
+
+    // --- READY PLAYER ME CONFIG ---
+    const RPM_SUBDOMAIN = 'demo';
+    const RPM_IFRAME_BASE_URL = `https://${RPM_SUBDOMAIN}.readyplayer.me/avatar`;
+
+    // --- PERSONA CONFIGURATION (MODIFIED for .glb URLs) ---
+    const personaConfig = {
+        friendly: {
+            name: "Ei (Friendly)",
+            avatar: "https://models.readyplayer.me/683424f141bfeee7cc66dac1.glb"
+        },
+        sage: {
+            name: "Ei (Sage)",
+            avatar: "https://models.readyplayer.me/683430d3ab2f2a1923a50157.glb"
+        },
+        coding: {
+            name: "Ei (Coding Mentor)",
+            avatar: "https://models.readyplayer.me/658c9b270198539c197f6a10.glb"
+        },
+        sarcastic: {
+            name: "Ei (Sarcastic)",
+            avatar: "https://models.readyplayer.me/664b6ed5078a0980375e2154.glb"
+        },
+        scifi: {
+            name: "Ei (Sci-Fi Bot)",
+            avatar: "https://models.readyplayer.me/664b6f1a078a0980375e21e8.glb"
+        },
+        default: {
+            name: "Ei",
+            avatar: "https://models.readyplayer.me/664b709e4a22c076a3000083.glb"
+        }
+    };
 
     // --- BADGE DEFINITIONS & GAMIFICATION STATE ---
     const LS_EARNED_BADGES_KEY = 'ei_earned_badges';
@@ -38,79 +84,115 @@ document.addEventListener('DOMContentLoaded', () => {
     const LS_PERSONAS_TRIED_KEY = 'ei_personas_tried';
     const LS_SESSIONS_INTERACTED_KEY = 'ei_sessions_interacted';
     const LS_HAS_VIEWED_HISTORY_KEY = 'ei_has_viewed_history';
-    const LS_XP_KEY = 'ei_user_xp'; 
-    const LS_LEVEL_KEY = 'ei_user_level'; 
+    const LS_XP_KEY = 'ei_user_xp';
+    const LS_LEVEL_KEY = 'ei_user_level';
 
-    // XP and Leveling constants
-    const XP_PER_MESSAGE = 15; // Moved here for clarity with other gamification constants
-    const LEVEL_THRESHOLDS = [0, 100, 250, 500, 800, 1200, 1700, 2300, 3000, 4000, 5500]; // Added back
-
+    const XP_PER_MESSAGE = 15;
+    const LEVEL_THRESHOLDS = [0, 100, 250, 500, 800, 1200, 1700, 2300, 3000, 4000, 5500];
 
     let earnedBadges = JSON.parse(localStorage.getItem(LS_EARNED_BADGES_KEY)) || [];
     let totalMessagesSent = parseInt(localStorage.getItem(LS_MESSAGE_COUNT_KEY), 10) || 0;
     let personasTried = JSON.parse(localStorage.getItem(LS_PERSONAS_TRIED_KEY)) || [];
     let sessionsInteracted = JSON.parse(localStorage.getItem(LS_SESSIONS_INTERACTED_KEY)) || [];
     let hasViewedHistory = localStorage.getItem(LS_HAS_VIEWED_HISTORY_KEY) === 'true';
-
-    const ALL_PERSONA_IDS = ["friendly", "sage", "coding", "sarcastic", "scifi"];
-
-    const badges = {
-        firstEcho: {
-            id: 'firstEcho',
-            name: 'First Echo',
-            description: "You've initiated your first conversation with Ei.",
-            emoji: '💬',
-            unlocked: false
-        },
-        curiousMind: {
-            id: 'curiousMind',
-            name: 'Curious Mind',
-            description: "Explored at least 2 different facets of Ei's personality.",
-            emoji: '🎭',
-            unlocked: false
-        },
-        level2Reached: {
-            id: 'level2Reached',
-            name: 'Level 2 Reached',
-            description: "Your connection with Ei is growing stronger!",
-            emoji: '✨',
-            unlocked: false
-        },
-        sessionWeaver: {
-            id: 'sessionWeaver',
-            name: 'Session Weaver',
-            description: "Weaving at least 3 threads of conversation.",
-            emoji: '🧵',
-            unlocked: false
-        },
-        timeTraveler: {
-            id: 'timeTraveler',
-            name: 'Time Traveler',
-            description: "Revisited a past conversation stream.",
-            emoji: '🕰️',
-            unlocked: false
-        },
-        dedicatedListener: {
-            id: 'dedicatedListener',
-            name: 'Dedicated Listener',
-            description: "Listened and responded thoughtfully (25 messages sent).",
-            emoji: '🎧',
-            unlocked: false
-        },
-        personaVirtuoso: {
-            id: 'personaVirtuoso',
-            name: 'Persona Virtuoso',
-            description: "Experienced all primary facets of Ei (all 5 personas tried).",
-            emoji: '🌟',
-            unlocked: false
-        }
-    };
-
-    // Gamification core state (XP and Level)
     let currentUserXP = 0;
     let currentUserLevel = 1;
 
+    const ALL_PERSONA_IDS = ["friendly", "sage", "coding", "sarcastic", "scifi"];
+    const badges = {
+        firstEcho: { id: 'firstEcho', name: 'First Echo', description: "You've initiated your first conversation with Ei.", emoji: '💬', unlocked: false },
+        curiousMind: { id: 'curiousMind', name: 'Curious Mind', description: "Explored at least 2 different facets of Ei's personality.", emoji: '🎭', unlocked: false },
+        level2Reached: { id: 'level2Reached', name: 'Level 2 Reached', description: "Your connection with Ei is growing stronger!", emoji: '✨', unlocked: false },
+        sessionWeaver: { id: 'sessionWeaver', name: 'Session Weaver', description: "Weaving at least 3 threads of conversation.", emoji: '🧵', unlocked: false },
+        timeTraveler: { id: 'timeTraveler', name: 'Time Traveler', description: "Revisited a past conversation stream.", emoji: '🕰️', unlocked: false },
+        dedicatedListener: { id: 'dedicatedListener', name: 'Dedicated Listener', description: "Listened and responded thoughtfully (25 messages sent).", emoji: '🎧', unlocked: false },
+        personaVirtuoso: { id: 'personaVirtuoso', name: 'Persona Virtuoso', description: "Experienced all primary facets of Ei (all 5 personas tried).", emoji: '🌟', unlocked: false }
+    };
 
+    // --- HELPER FUNCTIONS ---
+    function updateEiDisplay(personaId) {
+        const config = personaConfig[personaId] || personaConfig.default;
+        if (eiAvatarModelViewer) {
+            if (config.avatar && config.avatar.endsWith('.glb')) {
+                eiAvatarModelViewer.src = config.avatar;
+                eiAvatarModelViewer.alt = `${config.name} Avatar`;
+                eiAvatarModelViewer.style.display = 'block';
+            } else {
+                console.warn(`Avatar for persona ${personaId} is not a .glb file or is missing. Hiding model-viewer.`);
+                eiAvatarModelViewer.src = '';
+                eiAvatarModelViewer.style.display = 'none';
+            }
+        }
+        if (eiNameDisplay) {
+            eiNameDisplay.textContent = config.name;
+        }
+    }
+
+    // --- READY PLAYER ME FUNCTIONS ---
+    function openRpmModal() {
+        if (rpmModal && rpmIframe) {
+            rpmIframe.src = `${RPM_IFRAME_BASE_URL}?frameApi&clearCache`;
+            rpmModal.classList.add('visible');
+        }
+    }
+
+    function closeRpmModal() {
+        if (rpmModal && rpmIframe) {
+            rpmModal.classList.remove('visible');
+            rpmIframe.src = 'about:blank';
+        }
+    }
+
+    function displayUserAvatar(avatarUrl) {
+        const userAvatarContainer = document.getElementById('user-avatar-chat-display'); //
+        if (userAvatarModelViewer && avatarUrl) {
+            userAvatarModelViewer.src = avatarUrl;
+            if (userAvatarContainer) userAvatarContainer.style.display = 'block'; //
+            userAvatarModelViewer.style.display = 'block';
+        } else if (userAvatarModelViewer) {
+            if (userAvatarContainer) userAvatarContainer.style.display = 'none'; //
+            userAvatarModelViewer.style.display = 'none';
+            userAvatarModelViewer.src = ''; //
+        }
+    }
+
+    function handleRpmEvents(event) {
+        try {
+            const json = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+            if (json?.source !== 'readyplayerme') {
+                return;
+            }
+            console.log("RPM Event:", json.eventName, json.data);
+
+            if (json.eventName === 'v1.frame.ready') {
+                console.log('RPM Iframe is ready.');
+                if (rpmIframe.contentWindow) {
+                    rpmIframe.contentWindow.postMessage(JSON.stringify({
+                        target: 'readyplayerme',
+                        type: 'subscribe',
+                        eventName: 'v2.avatar.exported'
+                    }), '*');
+                }
+            }
+
+            if (json.eventName === 'v2.avatar.exported' || json.eventName === 'v1.avatar.exported') {
+                console.log('Avatar exported from RPM:', json.data.url);
+                currentUserAvatarUrl = json.data.url;
+                localStorage.setItem(LS_USER_AVATAR_URL_KEY, currentUserAvatarUrl);
+                displayUserAvatar(currentUserAvatarUrl);
+                closeRpmModal();
+            }
+
+            if (json.eventName === 'v1.user.set') {
+                console.log('RPM User Set/Changed:', json.data.id);
+            }
+        } catch (error) {
+            console.error('Error processing RPM event:', error, event.data);
+        }
+    }
+
+    // --- BADGE & GAMIFICATION FUNCTIONS ---
     function updateBadgeUnlockStatus() {
         earnedBadges.forEach(badgeId => {
             if (badges[badgeId]) {
@@ -118,21 +200,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     function saveEarnedBadges() {
         localStorage.setItem(LS_EARNED_BADGES_KEY, JSON.stringify(earnedBadges));
     }
-
     function saveGamificationStats() {
         localStorage.setItem(LS_MESSAGE_COUNT_KEY, totalMessagesSent.toString());
         localStorage.setItem(LS_PERSONAS_TRIED_KEY, JSON.stringify(personasTried));
         localStorage.setItem(LS_SESSIONS_INTERACTED_KEY, JSON.stringify(sessionsInteracted));
         localStorage.setItem(LS_HAS_VIEWED_HISTORY_KEY, hasViewedHistory.toString());
-        localStorage.setItem(LS_XP_KEY, currentUserXP.toString()); 
-        localStorage.setItem(LS_LEVEL_KEY, currentUserLevel.toString()); 
-        saveEarnedBadges(); 
+        localStorage.setItem(LS_XP_KEY, currentUserXP.toString());
+        localStorage.setItem(LS_LEVEL_KEY, currentUserLevel.toString());
+        localStorage.setItem(LS_USER_AVATAR_URL_KEY, currentUserAvatarUrl || '');
+        saveEarnedBadges();
     }
-
     function showBadgeNotification(badge) {
         const notificationDiv = document.createElement('div');
         notificationDiv.className = 'badge-notification fixed top-20 right-5 bg-violet-700 text-white p-4 rounded-lg shadow-xl z-50 opacity-0 transition-all duration-500 ease-out';
@@ -153,20 +233,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     function awardBadge(badgeId) {
         if (badges[badgeId] && !badges[badgeId].unlocked) {
             badges[badgeId].unlocked = true;
             if (!earnedBadges.includes(badgeId)) {
                 earnedBadges.push(badgeId);
             }
-            saveEarnedBadges(); 
+            saveEarnedBadges();
             console.log(`Badge awarded: ${badges[badgeId].name}`);
             showBadgeNotification(badges[badgeId]);
             displayEarnedBadges();
         }
     }
-
     function displayEarnedBadges() {
         if (!earnedBadgesContainer) return;
         earnedBadgesContainer.innerHTML = '';
@@ -186,7 +264,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
     function checkAndAwardBadges() {
         if (totalMessagesSent >= 1) awardBadge('firstEcho');
         if (personasTried.length >= 2) awardBadge('curiousMind');
@@ -198,12 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
             awardBadge('personaVirtuoso');
         }
     }
-
-    // --- GAMIFICATION FUNCTIONS (XP and Level) ---
     function loadXPState() {
-        const storedXP = localStorage.getItem(LS_XP_KEY); 
-        const storedLevel = localStorage.getItem(LS_LEVEL_KEY); 
-
+        const storedXP = localStorage.getItem(LS_XP_KEY);
         if (storedXP !== null) {
             currentUserXP = parseInt(storedXP, 10);
         } else {
@@ -212,18 +285,14 @@ document.addEventListener('DOMContentLoaded', () => {
         recalculateLevelFromXP();
         updateXPDisplay();
     }
-    
     function getXPForNextLevel(level) {
-        if (level < LEVEL_THRESHOLDS.length) return LEVEL_THRESHOLDS[level]; // Uses LEVEL_THRESHOLDS
+        if (level < LEVEL_THRESHOLDS.length) return LEVEL_THRESHOLDS[level];
         return Infinity;
     }
-
     function getXPForCurrentLevelStart(level) {
-        // Uses LEVEL_THRESHOLDS
-        if (level > 0 && (level - 1) < LEVEL_THRESHOLDS.length) return LEVEL_THRESHOLDS[level - 1]; 
+        if (level > 0 && (level - 1) < LEVEL_THRESHOLDS.length) return LEVEL_THRESHOLDS[level - 1];
         return 0;
     }
-
     function updateXPDisplay() {
         if (!xpLevelEl || !xpBarEl || !xpCurrentEl || !xpNextLevelEl) {
             return;
@@ -248,31 +317,30 @@ document.addEventListener('DOMContentLoaded', () => {
             xpBarEl.style.width = `${progress}%`;
         }
     }
-
     function recalculateLevelFromXP() {
         let newLevel = 1;
-        // Uses LEVEL_THRESHOLDS
         for (let i = 1; i < LEVEL_THRESHOLDS.length; i++) {
-            if (currentUserXP >= LEVEL_THRESHOLDS[i]) newLevel = i + 1;
-            else break;
+            if (currentUserXP >= LEVEL_THRESHOLDS[i]) {
+                newLevel = i + 1;
+            } else {
+                break;
+            }
         }
         currentUserLevel = newLevel;
     }
-
     function addXP(amount) {
         currentUserXP += amount;
         const oldLevel = currentUserLevel;
         recalculateLevelFromXP();
-        updateXPDisplay(); 
+        updateXPDisplay();
 
         if (currentUserLevel > oldLevel) {
             console.log(`Level Up! Reached Level ${currentUserLevel}`);
             addMessageToChat(`Congratulations! You've reached Level ${currentUserLevel}! ✨`, 'system-info');
         }
-        saveGamificationStats(); 
-        checkAndAwardBadges(); 
+        saveGamificationStats();
+        checkAndAwardBadges();
     }
-
 
     // --- INITIALIZATION ---
     function initializeApp() {
@@ -280,9 +348,11 @@ document.addEventListener('DOMContentLoaded', () => {
         animateCelestialFragment();
         animateDynamicBackground();
         initParticleAnimation();
-        
-        loadXPState(); 
-        updateBadgeUnlockStatus(); 
+
+        loadXPState();
+        updateBadgeUnlockStatus();
+        updateEiDisplay(currentPersona);
+        displayUserAvatar(currentUserAvatarUrl);
 
         if (!currentSessionId) {
             startNewChatSession(false);
@@ -291,13 +361,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionsInteracted.push(currentSessionId);
             }
         }
-        saveGamificationStats(); 
+        saveGamificationStats();
 
         loadChatSessions();
         displayEarnedBadges();
-        checkAndAwardBadges(); 
+        checkAndAwardBadges();
 
-        setTimeout(() => { 
+        window.addEventListener('message', handleRpmEvents);
+
+        setTimeout(() => {
             if (welcomeContainer) {
                 anime({
                     targets: welcomeContainer, opacity: 0, duration: 1000, easing: 'easeOutExpo',
@@ -311,11 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 4000);
     }
-    
-    function generateSessionId() {
-        return uuid.v4();
-    }
 
+    function generateSessionId() { return uuid.v4(); }
     function startNewChatSession(showUI = true) {
         currentSessionId = generateSessionId();
         localStorage.setItem(LS_SESSION_ID_KEY, currentSessionId);
@@ -324,26 +393,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!sessionsInteracted.includes(currentSessionId)) {
             sessionsInteracted.push(currentSessionId);
         }
-        saveGamificationStats(); 
 
         if (chatMessagesContainer) chatMessagesContainer.innerHTML = '';
         showTypingIndicator(false);
         showEmptySessionPlaceholder(true);
         loadChatSessions();
         updateActiveSessionInPanel(currentSessionId);
-        checkAndAwardBadges(); 
 
-        if (showUI) { 
-            if (personaSelectionScreen.style.opacity === "1") {
+        if (showUI) {
+            if (personaSelectionScreen && (personaSelectionScreen.style.opacity === "1" || personaSelectionScreen.style.display === 'flex')) { //
                 hidePersonaSelectionScreen(showChatUI);
             } else {
                 showChatUI();
             }
         }
+        saveGamificationStats();
+        checkAndAwardBadges();
         return currentSessionId;
     }
-
-     function showEmptySessionPlaceholder(show) {
+    function showEmptySessionPlaceholder(show) {
         if (emptySessionPlaceholder) {
             if (show) {
                 emptySessionPlaceholder.classList.add('visible');
@@ -353,22 +421,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- HISTORY PANEL & CHAT HISTORY ---
     if (historyPanelToggle && historyPanel && mainContentArea) {
         historyPanelToggle.addEventListener('click', () => {
             historyPanel.classList.toggle('open');
         });
     }
-
     if (newChatButton) {
         newChatButton.addEventListener('click', () => {
-            startNewChatSession(true); 
+            startNewChatSession(true);
             if (historyPanel.classList.contains('open')) {
                  historyPanel.classList.remove('open');
             }
         });
     }
-
-    async function loadChatSessions() { 
+    async function loadChatSessions() {
         if (!historyList) return;
         try {
             const response = await fetch('/get_sessions');
@@ -377,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errData.error || `HTTP error! Status: ${response.status}`);
             }
             const sessions = await response.json();
-            historyList.innerHTML = ''; 
+            historyList.innerHTML = '';
 
             if (sessions.length === 0) {
                 const noSessionsLi = document.createElement('li');
@@ -406,20 +473,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             currentSessionId = session.session_id;
                             localStorage.setItem(LS_SESSION_ID_KEY, currentSessionId);
                             console.log(`Switched to session: ${currentSessionId}`);
-                            
-                            hasViewedHistory = true; 
-                            saveGamificationStats(); 
+
+                            hasViewedHistory = true;
+                            saveGamificationStats();
 
                             loadChatHistoryForSession(currentSessionId);
                             updateActiveSessionInPanel(currentSessionId);
-                            checkAndAwardBadges(); 
+                            checkAndAwardBadges();
                         }
                          if (historyPanel.classList.contains('open')) {
                             historyPanel.classList.remove('open');
                          }
-                         if (personaSelectionScreen.style.opacity === "1") {
+                         if (personaSelectionScreen && (personaSelectionScreen.style.opacity === "1" || personaSelectionScreen.style.display === 'flex')) { //
                              hidePersonaSelectionScreen(showChatUI);
-                         } else if (chatUiContainer.style.opacity === "0") {
+                         } else if (chatUiContainer && (chatUiContainer.style.opacity === "0" || chatUiContainer.style.display === 'none')) { //
                              showChatUI();
                          }
                     });
@@ -432,7 +499,8 @@ document.addEventListener('DOMContentLoaded', () => {
             historyList.innerHTML = `<li class="px-2 py-1 text-sm text-red-400 italic">Error loading sessions.</li>`;
         }
     }
-    function updateActiveSessionInPanel(activeSessionId) { 
+    function updateActiveSessionInPanel(activeSessionId) {
+        if (!historyList) return;
         const items = historyList.querySelectorAll('.history-item');
         items.forEach(item => {
             if (item.dataset.sessionId === activeSessionId) {
@@ -442,10 +510,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    async function loadChatHistoryForSession(sessionId) { 
+    async function loadChatHistoryForSession(sessionId) {
         if (!chatMessagesContainer || !sessionId) return;
-        chatMessagesContainer.innerHTML = ''; 
-        showEmptySessionPlaceholder(false); 
+        chatMessagesContainer.innerHTML = '';
+        showEmptySessionPlaceholder(false);
 
         try {
             const response = await fetch(`/get_history?session_id=${sessionId}`);
@@ -457,11 +525,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (history.error) {
                 console.error("Error fetching history from backend:", history.error, history.details || '');
-                addMessageToChat(`System: Could not load chat history - ${history.error}`, 'system-info', true); 
+                addMessageToChat(`System: Could not load chat history - ${history.error}`, 'system-info', true);
                 return;
             }
+
             if (history.length === 0) {
-                showEmptySessionPlaceholder(true); 
+                showEmptySessionPlaceholder(true);
             } else {
                 history.forEach(log => {
                     if (log.user_message) {
@@ -478,19 +547,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error(`Could not fetch chat history for session ${sessionId}:`, error);
-            addMessageToChat(`System: Failed to load chat history. ${error.message}`, 'system-info', true); 
-            showEmptySessionPlaceholder(false); 
+            addMessageToChat(`System: Failed to load chat history. ${error.message}`, 'system-info', true);
+            showEmptySessionPlaceholder(false);
         }
     }
 
-    function showPersonaSelectionScreen() { 
+    // --- UI TRANSITIONS & DISPLAY ---
+    function showPersonaSelectionScreen() {
         if (personaSelectionScreen) {
             hideChatUI();
             personaSelectionScreen.style.display = 'flex';
             anime({ targets: personaSelectionScreen, opacity: 1, duration: 800, easing: 'easeInExpo' });
         }
     }
-    function hidePersonaSelectionScreen(callback) { 
+    function hidePersonaSelectionScreen(callback) {
         if (personaSelectionScreen) {
             anime({
                 targets: personaSelectionScreen, opacity: 0, duration: 700, easing: 'easeOutExpo',
@@ -503,8 +573,9 @@ document.addEventListener('DOMContentLoaded', () => {
             callback();
         }
     }
-    function showChatUI() { 
+    function showChatUI() {
         if (chatUiContainer) {
+            updateEiDisplay(currentPersona); //
             showTypingIndicator(false);
             chatUiContainer.style.display = 'flex';
             anime({
@@ -513,6 +584,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 duration: 1000,
                 easing: 'easeInExpo',
             });
+            if (currentSessionId) {
+                const hasMessages = chatMessagesContainer && chatMessagesContainer.children.length > 0;
+                if (!hasMessages) {
+                     loadChatHistoryForSession(currentSessionId);
+                }
+            } else {
+                 showEmptySessionPlaceholder(true);
+            }
         }
     }
     function hideChatUI() {
@@ -529,21 +608,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- EVENT LISTENERS ---
+    if (createUserAvatarButton) {
+        createUserAvatarButton.addEventListener('click', openRpmModal);
+    }
+    if (closeRpmModalButton) {
+        closeRpmModalButton.addEventListener('click', closeRpmModal);
+    }
+
     personaCards.forEach(card => {
         card.addEventListener('click', () => {
             currentPersona = card.getAttribute('data-persona');
             localStorage.setItem(LS_PERSONA_KEY, currentPersona);
             console.log(`Persona selected: ${currentPersona}`);
 
-            if (!personasTried.includes(currentPersona)) {
-                personasTried.push(currentPersona);
-            }
-            saveGamificationStats(); 
+            if (!personasTried.includes(currentPersona)) { personasTried.push(currentPersona); }
 
             hidePersonaSelectionScreen(() => {
                 showChatUI();
-                loadChatHistoryForSession(currentSessionId);
-                checkAndAwardBadges(); 
+                if (currentSessionId) {
+                    loadChatHistoryForSession(currentSessionId);
+                } else {
+                    startNewChatSession(false);
+                    loadChatHistoryForSession(currentSessionId);
+                }
+                saveGamificationStats();
+                checkAndAwardBadges();
             });
         });
     });
@@ -554,7 +644,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const userMessage = messageInput.value.trim();
 
             if (!currentSessionId) {
-                addMessageToChat("Error: No active session. Please start a new chat.", 'ei-error');
+                addMessageToChat("Error: No active session. Please start a new chat or select a persona.", 'ei-error');
                 return;
             }
 
@@ -565,9 +655,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 showTypingIndicator(true);
 
                 totalMessagesSent++;
-                
+
                 try {
-                    addXP(XP_PER_MESSAGE); 
+                    addXP(XP_PER_MESSAGE);
 
                     const response = await fetch('/chat', {
                         method: 'POST',
@@ -590,21 +680,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     showTypingIndicator(false);
                     addMessageToChat('Error: Could not connect to the server. Please try again.', 'ei-error');
                 } finally {
-                    saveGamificationStats(); 
-                    checkAndAwardBadges(); 
+                    saveGamificationStats();
+                    checkAndAwardBadges();
+                    if (chatMessagesContainer.querySelectorAll('.user-bubble').length === 1 && chatMessagesContainer.querySelectorAll('.ei-bubble').length <=1) {
+                        loadChatSessions();
+                    }
                 }
             }
         });
     }
-    
-    if (messageInput) { 
+    if (messageInput) {
         messageInput.addEventListener('input', () => {
             if (emptySessionPlaceholder && emptySessionPlaceholder.classList.contains('visible') &&
                 chatMessagesContainer && chatMessagesContainer.children.length === 0) {
                  showEmptySessionPlaceholder(false);
             }
         });
-        messageInput.addEventListener('focus', () => { 
+        messageInput.addEventListener('focus', () => {
             if (emptySessionPlaceholder && emptySessionPlaceholder.classList.contains('visible') &&
                 chatMessagesContainer && chatMessagesContainer.children.length === 0) {
                  showEmptySessionPlaceholder(false);
@@ -612,9 +704,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function addMessageToChat(message, sender, isHistory = false) { 
+    function addMessageToChat(message, sender, isHistory = false) {
         if (!chatMessagesContainer) return;
-        if (!isHistory && sender !== 'system-info') {
+        if (!isHistory && sender !== 'system-info' && emptySessionPlaceholder && emptySessionPlaceholder.classList.contains('visible')) {
             showEmptySessionPlaceholder(false);
         }
 
@@ -643,11 +735,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
          chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
     }
-    function showTypingIndicator(show) { 
+    function showTypingIndicator(show) {
         if (typingIndicator) { typingIndicator.style.display = show ? 'block' : 'none'; }
     }
 
-    function animateDynamicBackground() { 
+
+    // --- ANIMATION FUNCTIONS ---
+    function animateDynamicBackground() {
         const bodyStyle = document.body.style;
         let gradientState = {
             startH: 222, startS: 30, startL: 20,
@@ -659,11 +753,25 @@ document.addEventListener('DOMContentLoaded', () => {
         bodyStyle.setProperty('--gradient-end-h', gradientState.endH);
         bodyStyle.setProperty('--gradient-end-s', gradientState.endS + '%');
         bodyStyle.setProperty('--gradient-end-l', gradientState.endL + '%');
+
         anime({
             targets: gradientState,
-            startH: [ { value: 222, duration: 10000 }, { value: 240, duration: 10000 }, { value: 260, duration: 10000 }, { value: 222, duration: 10000 } ],
-            endH: [ { value: 260, duration: 10000 }, { value: 280, duration: 10000 }, { value: 300, duration: 10000 }, { value: 260, duration: 10000 } ],
-            duration: 40000, easing: 'linear', loop: true, direction: 'normal',
+            startH: [
+                { value: 222, duration: 10000 },
+                { value: 240, duration: 10000 },
+                { value: 260, duration: 10000 },
+                { value: 222, duration: 10000 }
+            ],
+            endH: [
+                { value: 260, duration: 10000 },
+                { value: 280, duration: 10000 },
+                { value: 300, duration: 10000 },
+                { value: 260, duration: 10000 }
+            ],
+            duration: 40000,
+            easing: 'linear',
+            loop: true,
+            direction: 'normal',
             update: function() {
                 bodyStyle.setProperty('--gradient-start-h', gradientState.startH);
                 bodyStyle.setProperty('--gradient-end-h', gradientState.endH);
@@ -671,15 +779,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function initParticleAnimation() { 
+    function initParticleAnimation() {
         const canvas = document.getElementById('particle-canvas');
         if (!canvas) { console.error('Particle canvas not found!'); return; }
         const ctx = canvas.getContext('2d');
         let particlesArray = [];
         const numberOfParticles = 50;
+
         function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
+
         class Particle {
             constructor() {
                 this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height;
@@ -697,11 +807,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
             }
         }
+
         function initParticles() {
             particlesArray = [];
             for (let i = 0; i < numberOfParticles; i++) { particlesArray.push(new Particle()); }
         }
         initParticles();
+
         function animateParticles() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let i = 0; i < particlesArray.length; i++) { particlesArray[i].update(); particlesArray[i].draw(); }
@@ -710,7 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
         animateParticles();
     }
 
-    function animateWelcomeSequence() { 
+    function animateWelcomeSequence() {
         const welcomeText = "Greetings, wanderer of the digital ether. I am Ei. What echoes of the heart do you seek today?";
         const projectQuoteText = "Ei- Echo of Her";
         const poeticWelcomeEl = document.getElementById('poetic-welcome');
@@ -738,7 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function animateCelestialFragment() { 
+    function animateCelestialFragment() {
         const fragmentShapeGroup = document.getElementById('fragment-shape-group');
         const fragmentInner = document.getElementById('fragment-inner');
         const particles = Array.from(document.querySelectorAll('#celestial-fragment-svg circle[id^="particle-"]')).filter(p => p != null);
@@ -746,21 +858,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (fragmentShapeGroup) {
             anime({ targets: fragmentShapeGroup, rotate: '360', loop: true, duration: 30000, easing: 'linear' });
         }
+
         if (fragmentInner) {
             anime({ targets: fragmentInner, opacity: [0.4, 0.9, 0.4], loop: true, direction: 'alternate', duration: 4000, easing: 'easeInOutSine' });
         }
+
         const glowFilterGaussian = document.querySelector('#softGlowFilter feGaussianBlur');
         if (glowFilterGaussian) {
             anime({ targets: glowFilterGaussian, attribute: 'stdDeviation', values: ['3', '4', '3'], loop: true, direction: 'alternate', duration: 3500, easing: 'easeInOutSine', delay: 500 });
         }
+
         particles.forEach((particle) => {
             if (particle) {
                 anime({
                     targets: particle,
-                    opacity: [{ value: 0, duration: 0 }, { value: anime.random(0.5, 0.9), duration: anime.random(1000, 2000) }, { value: 0, duration: anime.random(1000, 2000), delay: anime.random(2000, 4000) }],
-                    translateX: [{ value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)}, { value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)}, { value: 0, duration: anime.random(3000, 5000) }],
-                    translateY: [{ value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)}, { value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)}, { value: 0, duration: anime.random(3000, 5000) }],
-                    loop: true, easing: 'easeInOutSine', delay: anime.random(0, 2000)
+                    opacity: [
+                        { value: 0, duration: 0 },
+                        { value: anime.random(0.5, 0.9), duration: anime.random(1000, 2000) },
+                        { value: 0, duration: anime.random(1000, 2000), delay: anime.random(2000, 4000) }
+                    ],
+                    translateX: [
+                        { value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)},
+                        { value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)},
+                        { value: 0, duration: anime.random(3000, 5000) }
+                    ],
+                    translateY: [
+                        { value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)},
+                        { value: () => anime.random(-5, 5), duration: anime.random(3000, 5000)},
+                        { value: 0, duration: anime.random(3000, 5000) }
+                    ],
+                    loop: true,
+                    easing: 'easeInOutSine',
+                    delay: anime.random(0, 2000)
                 });
             }
         });
