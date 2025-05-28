@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeRpmModalButton = document.getElementById('close-rpm-modal-button');
     const userAvatarModelViewer = document.getElementById('user-avatar-model');
 
+    // Add this line
+    const personaQuickSelect = document.getElementById('persona-quick-select');
+
     // --- STATE VARIABLES ---
     const LS_PERSONA_KEY = 'ei_selected_persona';
     const LS_SESSION_ID_KEY = 'ei_current_session_id';
@@ -62,19 +65,19 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         coding: {
             name: "Ei (Coding Mentor)",
-            avatar: "https://models.readyplayer.me/658c9b270198539c197f6a10.glb"
+            avatar: "https://models.readyplayer.me/68357d10eff9e447b093ad69.glb"
         },
         sarcastic: {
             name: "Ei (Sarcastic)",
-            avatar: "https://models.readyplayer.me/664b6ed5078a0980375e2154.glb"
+            avatar: "https://models.readyplayer.me/68357e47c24bd6b4127b13b5.glb"
         },
         scifi: {
             name: "Ei (Sci-Fi Bot)",
-            avatar: "https://models.readyplayer.me/664b6f1a078a0980375e21e8.glb"
+            avatar: "https://models.readyplayer.me/68357ed7a4fff27714a9d6f2.glb"
         },
         default: {
             name: "Ei",
-            avatar: "https://models.readyplayer.me/664b709e4a22c076a3000083.glb"
+            avatar: "https://models.readyplayer.me/68357ed7a4fff27714a9d6f2.glb"
         }
     };
 
@@ -353,6 +356,11 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBadgeUnlockStatus();
         updateEiDisplay(currentPersona);
         displayUserAvatar(currentUserAvatarUrl);
+
+        // Set the initial value of the dropdown to the current persona
+        if (personaQuickSelect) {
+            personaQuickSelect.value = currentPersona;
+        }
 
         if (!currentSessionId) {
             startNewChatSession(false);
@@ -700,6 +708,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (emptySessionPlaceholder && emptySessionPlaceholder.classList.contains('visible') &&
                 chatMessagesContainer && chatMessagesContainer.children.length === 0) {
                  showEmptySessionPlaceholder(false);
+            }
+        });
+    }
+
+    // Add this new event listener block
+    if (personaQuickSelect) {
+        // Set the initial value of the dropdown to the current persona
+        personaQuickSelect.value = currentPersona;
+
+        personaQuickSelect.addEventListener('change', function() {
+            const newPersona = this.value;
+            if (newPersona !== currentPersona) {
+                currentPersona = newPersona;
+                localStorage.setItem(LS_PERSONA_KEY, currentPersona);
+                updateEiDisplay(currentPersona);
+
+                // Add to personasTried for gamification, if not already there
+                if (!personasTried.includes(currentPersona)) {
+                    personasTried.push(currentPersona);
+                    saveGamificationStats(); // Ensure this function saves personasTried
+                    checkAndAwardBadges(); // Check if new badges are unlocked
+                }
+
+                console.log(`Persona quick changed to: ${currentPersona}`);
+                // Optional: Add a subtle notification or message in chat indicating persona change
+                // addMessageToChat(`Ei's persona has shifted to ${personaConfig[currentPersona]?.name || currentPersona}.`, 'system-info');
             }
         });
     }
