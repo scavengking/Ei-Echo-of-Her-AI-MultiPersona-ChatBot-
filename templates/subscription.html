@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription - Ei</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Dark Blue-Gray */
+            color: #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen flex flex-col items-center justify-center p-4">
+        <div class="w-full max-w-md bg-gray-900 rounded-2xl shadow-2xl p-8 text-center border border-violet-800">
+            <h1 class="text-3xl font-bold text-violet-400 mb-2">Ei Pro Subscription</h1>
+            <p class="text-gray-400 mb-6">Unlock the full potential of your echo.</p>
+
+            <div id="loading-state" class="my-8">
+                <p class="text-violet-300 animate-pulse">Calculating your personalized offer...</p>
+            </div>
+            
+            <div id="pricing-details" class="hidden">
+                <div class="bg-gray-800 p-6 rounded-lg mb-6">
+                    <p class="text-gray-500 line-through" id="base-price">Base Price: ₹499.00</p>
+                    <p class="text-xl text-green-400 font-semibold" id="discount-info">Your Gamified Discount (15%): -₹74.85</p>
+                    <p class="text-4xl font-extrabold text-white mt-2" id="final-price">Final Price: ₹424.15</p>
+                    <p class="text-gray-400 text-sm">per month</p>
+                </div>
+
+                <ul class="text-left space-y-2 text-gray-300 mb-8">
+                    <li class="flex items-center"><svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Unlimited Chat History</li>
+                    <li class="flex items-center"><svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Access to All Personas</li>
+                    <li class="flex items-center"><svg class="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>Priority Support</li>
+                </ul>
+                
+                <button id="subscribe-button" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 shadow-lg">Subscribe Now</button>
+            </div>
+            <p id="error-message" class="text-red-400 text-sm mt-4 hidden"></p>
+        </div>
+         <a href="{{ url_for('root') }}" class="text-violet-400 hover:underline mt-6">Back to Chat</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loadingState = document.getElementById('loading-state');
+            const pricingDetails = document.getElementById('pricing-details');
+            const errorMessage = document.getElementById('error-message');
+            const subscribeButton = document.getElementById('subscribe-button');
+
+            // Fetch personalized subscription details
+            async function fetchDetails() {
+                try {
+                    const response = await fetch('/get_subscription_details');
+                    if (!response.ok) throw new Error('Could not fetch details.');
+                    
+                    const data = await response.json();
+
+                    document.getElementById('base-price').textContent = `Base Price: ₹${data.base_price_inr.toFixed(2)}`;
+                    document.getElementById('discount-info').textContent = `Your Gamified Discount (${data.discount_percent}%): -₹${(data.base_price_inr - data.final_price_inr).toFixed(2)}`;
+                    document.getElementById('final-price').textContent = `Final Price: ₹${data.final_price_inr.toFixed(2)}`;
+
+                    loadingState.style.display = 'none';
+                    pricingDetails.style.display = 'block';
+
+                } catch (error) {
+                    loadingState.style.display = 'none';
+                    errorMessage.textContent = 'Error: Could not load your personalized offer. Please try again later.';
+                    errorMessage.style.display = 'block';
+                    console.error(error);
+                }
+            }
+
+            subscribeButton.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/create_order', { method: 'POST' });
+                    const order = await response.json();
+
+                    if(order.error) {
+                         errorMessage.textContent = `Error: ${order.error}`;
+                         errorMessage.style.display = 'block';
+                         return;
+                    }
+
+                    const options = {
+                        "key": order.key_id,
+                        "amount": order.amount,
+                        "currency": order.currency,
+                        "name": "Ei Pro Subscription",
+                        "description": "Monthly access to Ei Pro features",
+                        "order_id": order.order_id,
+                        "handler": function (response){
+                            // This function is called after a successful payment
+                            alert('Payment successful! Your subscription is now active.');
+                            // Optionally, verify payment on server side here and then redirect
+                            window.location.href = "{{ url_for('root') }}";
+                        },
+                        "prefill": {
+                            "name": order.user_username,
+                            "email": order.user_email,
+                        },
+                        "theme": {
+                            "color": "#6d28d9" // Violet
+                        }
+                    };
+                    const rzp1 = new Razorpay(options);
+                    rzp1.open();
+
+                } catch(error) {
+                     errorMessage.textContent = 'Could not initiate payment. Please try again.';
+                     errorMessage.style.display = 'block';
+                     console.error(error);
+                }
+            });
+
+            fetchDetails();
+        });
+    </script>
+</body>
+</html>

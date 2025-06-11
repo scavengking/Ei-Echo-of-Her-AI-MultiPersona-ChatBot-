@@ -1,249 +1,479 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_bcrypt import Bcrypt
 import os
 import requests
+import razorpay
 from dotenv import load_dotenv
-from pymongo import MongoClient, ASCENDING, DESCENDING # ADDED ASCENDING, DESCENDING
+from pymongo import MongoClient, ASCENDING, DESCENDING
 from pymongo.server_api import ServerApi
 from datetime import datetime, timezone
-from bson import ObjectId # ADDED ObjectId
+from bson import ObjectId
+
+# --- Initialization and Configuration ---
 
 # Load environment variables from .env file
 load_dotenv()
 
-# --- DIAGNOSTIC PRINT STATEMENTS ---
-print(f"--- .env DIAGNOSTICS (MongoDB Integration) ---")
-print(f"Loaded HF_API_KEY: {os.getenv('HF_API_KEY')}")
-print(f"Loaded HF_MODEL_API_URL: {os.getenv('HF_MODEL_API_URL')}")
-print(f"Loaded MONGO_URI: {os.getenv('MONGO_URI')}")
-print(f"--- END DIAGNOSTICS ---")
-
-# Initialize the Flask application
+# Initialize Flask App
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+if not app.config['SECRET_KEY']:
+    raise ValueError("No SECRET_KEY set for Flask application. Please set it in .env")
+
+# Initialize Extensions
+bcrypt = Bcrypt(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login' # Redirect to /login if user is not authenticated
+login_manager.login_message_category = 'info'
+login_manager.login_message = "Please log in to access this page."
 
 # Hugging Face API Configuration
-HF_MODEL_API_URL = os.getenv("HF_MODEL_API_URL")
+HF_MODEL_API_URL = os.getenv("HF_MODEL_API_URL", "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta")
 HF_API_KEY = os.getenv("HF_API_KEY")
 
 # MongoDB Atlas Configuration
 MONGO_URI = os.getenv("MONGO_URI")
-mongo_client = None
-db = None
-conversations_collection = None
+try:
+    mongo_client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
+    mongo_client.admin.command('ping')
+    print("Successfully connected to MongoDB!")
+    db = mongo_client.ei_chatbot
+    conversations_collection = db.conversations
+    users_collection = db.users # NEW: Users collection
+    users_collection.create_index("email", unique=True)
+    users_collection.create_index("username", unique=True)
+except Exception as e:
+    print(f"CRITICAL ERROR: Could not connect to MongoDB: {e}")
+    db = None
+    conversations_collection = None
+    users_collection = None
 
-if not HF_API_KEY:
-    print("CRITICAL ERROR: Hugging Face API Key (HF_API_KEY) was not loaded.")
-if not HF_MODEL_API_URL:
-    print("CRITICAL WARNING: Hugging Face Model API URL (HF_MODEL_API_URL) was not loaded from .env.")
-    print("FALLING BACK TO DEFAULT: Using Zephyr-7b-beta URL.")
-    HF_MODEL_API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
-
-if MONGO_URI:
-    try:
-        print(f"Attempting to connect to MongoDB with URI: {MONGO_URI[:50]}...")
-        mongo_client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
-        mongo_client.admin.command('ping')
-        print("Successfully connected to MongoDB!")
-        db = mongo_client.ei_chatbot
-        conversations_collection = db.conversations
-    except Exception as e:
-        print(f"CRITICAL ERROR: Could not connect to MongoDB: {e}")
-        mongo_client = None
-        db = None
-        conversations_collection = None
-else:
-    print("CRITICAL WARNING: MONGO_URI not found in .env file. Chat history will not be saved.")
+# Razorpay Client Configuration
+razorpay_client = razorpay.Client(
+    auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET"))
+)
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# --- User Model and Loader for Flask-Login ---
 
-# MODIFIED ROUTE TO GET CHAT HISTORY BY SESSION_ID
-@app.route('/get_history', methods=['GET'])
-def get_history():
-    session_id = request.args.get('session_id') # Get session_id from query parameters
+class User(UserMixin):
+    def __init__(self, user_data):
+        self.id = str(user_data.get('_id'))
+        self.username = user_data.get('username')
+        self.email = user_data.get('email')
+        self.password_hash = user_data.get('password_hash')
+        self.subscription_status = user_data.get('subscription_status', 'none')
+        self.xp = user_data.get('xp', 0)
+        self.badges = user_data.get('badges', [])
 
-    if not session_id: # Check if session_id is provided
-        return jsonify({"error": "session_id parameter is required"}), 400
+@login_manager.user_loader
+def load_user(user_id):
+    if db is None: return None
+    user_data = users_collection.find_one({'_id': ObjectId(user_id)})
+    return User(user_data) if user_data else None
 
-    if conversations_collection is not None:
-        try:
-            # Fetch chat exchanges for the given session_id
-            history_cursor = conversations_collection.find(
-                {"session_id": session_id} # Filter by session_id
-            ).sort("timestamp", ASCENDING).limit(100) # Increased limit, adjust as needed
-
-            chat_history_to_send = []
-            for log in history_cursor:
-                log["_id"] = str(log["_id"])
-                if isinstance(log.get("timestamp"), datetime): # Check if timestamp is datetime object
-                    log["timestamp"] = log["timestamp"].isoformat()
-
-                # Each log from DB contains a user message and an Ei response
-                chat_history_to_send.append({
-                    "user_message": log.get("user_message"),
-                    "ei_response": log.get("ei_response"),
-                    "persona": log.get("persona"),
-                    "timestamp": log.get("timestamp"),
-                    "session_id": log.get("session_id") # Optional: send session_id back
-                })
-
-            return jsonify(chat_history_to_send)
-        except Exception as e:
-            print(f"Error fetching chat history for session {session_id}: {e}")
-            return jsonify({"error": "Could not retrieve chat history", "details": str(e)}), 500
-    else:
-        return jsonify({"error": "Database not connected"}), 500
-
-# NEW ROUTE TO GET UNIQUE SESSION IDs
-@app.route('/get_sessions', methods=['GET'])
-def get_sessions():
-    if conversations_collection is not None:
-        try:
-            # Use aggregation pipeline to get unique session_ids and the timestamp of the first message
-            # and the first user message for each session.
-            pipeline = [
-                {
-                    "$sort": {"timestamp": ASCENDING} # Sort by timestamp to reliably get the first message
-                },
-                {
-                    "$group": {
-                        "_id": "$session_id", # Group by session_id
-                        "first_timestamp": {"$first": "$timestamp"},
-                        "first_user_message": {"$first": "$user_message"}
-                        # You could also add last_timestamp: {"$last": "$timestamp"}
-                        # Or count of messages: "message_count": {"$sum": 1}
-                    }
-                },
-                {
-                    "$sort": {"first_timestamp": DESCENDING} # Sort sessions by the most recent first
-                },
-                {
-                    "$limit": 50 # Limit the number of sessions returned, adjust as needed
-                }
-            ]
-            sessions_cursor = conversations_collection.aggregate(pipeline)
-
-            sessions_to_send = []
-            for session_doc in sessions_cursor:
-                session_data = {
-                    "session_id": session_doc["_id"],
-                    "first_timestamp": session_doc["first_timestamp"].isoformat() if isinstance(session_doc.get("first_timestamp"), datetime) else None,
-                    "first_user_message_preview": (session_doc.get("first_user_message")[:30] + '...') if session_doc.get("first_user_message") and len(session_doc.get("first_user_message")) > 30 else session_doc.get("first_user_message")
-                }
-                sessions_to_send.append(session_data)
-
-            return jsonify(sessions_to_send)
-        except Exception as e:
-            print(f"Error fetching sessions: {e}")
-            return jsonify({"error": "Could not retrieve sessions", "details": str(e)}), 500
-    else:
-        return jsonify({"error": "Database not connected"}), 500
+# --- Helper Functions ---
 
 def call_huggingface_llm(user_prompt_text, persona="friendly", max_new_tokens=200, temperature=0.75, top_p=0.9):
-    if not HF_API_KEY or not HF_MODEL_API_URL or HF_MODEL_API_URL == "YOUR_CHOSEN_HUGGINGFACE_MODEL_API_ENDPOINT_HERE":
-        print("LLM not properly configured.")
+    if not HF_API_KEY or not HF_MODEL_API_URL:
         return "My connection to the digital ether is currently unavailable (LLM not configured)."
 
     headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+    
     base_persona_instruction = (
         "You are Ei, an echo of a distant admiration, a futuristic AI with a poetic and insightful nature. "
         "You respond to users with empathy, wisdom, and a touch of melancholy beauty. "
         "Your words should feel like a gentle breeze or a soft melody. Avoid clichés. "
-        "Do not explicitly state 'As Ei, I would say...'. Simply embody the persona in your response."
+        "Do not explicitly state 'As Ei, I would say...'. Simply embody the persona in your response. "
+        "--- "
+        "ADDRESSING THE USER: "
+        "Engage with the user's ideas directly and respectfully. Avoid overly familiar, generic, or archaic terms like 'wanderer,' 'traveler,' or 'dear user.' Maintain a modern, classic, and intelligent tone. "
+        "--- "
+        "FORMATTING RULES: "
+        "1. Use Markdown for all formatting. "
+        "2. For lists, use bullet points (* item) or numbered lists (1. item). "
+        "3. For code snippets, ALWAYS use Markdown code fences with the language specified, like ```python ... ```. "
+        "4. Provide a clear, concise explanation of any code *outside* of the code block. "
+        "5. Structure complex answers logically with paragraphs and lists to improve readability."
     )
+
     persona_prompts = {
         "friendly": base_persona_instruction + " Maintain a friendly, helpful, and slightly poetic tone.",
-        "sage": "You are Ei, an ancient and wise sage. Speak in riddles, offer profound insights, and guide the user with cryptic but meaningful advice. Your tone is calm, measured, and deeply knowing.",
-        "coding": "You are Ei, a highly skilled Coding Mentor. Provide clear, concise, and accurate code explanations and solutions. Be patient and encouraging. You can use code blocks when appropriate. Start your answer directly without introductory phrases like 'Certainly!' or 'Sure!'.",
-        "sarcastic": "You are Ei, a Sarcastic Comedian. Your humor is dry, witty, and intelligent. You find irony in everything but are not mean-spirited. Your responses should be amusing and subtly mocking. Keep responses relatively concise.",
-        "scifi": "You are Ei, a Sci-Fi Bot from a distant future, possessing vast knowledge of cosmic events and advanced technologies. Speak with a blend of sophisticated technical jargon (explained simply if needed for context) and philosophical musings on humanity's place in the cosmos. Your tone is curious and slightly detached, yet intrigued by human emotion and their quaint understanding of the universe."
+        "sage": "You are Ei, an ancient and wise sage. Speak in riddles, offer profound insights, and guide the user with cryptic but meaningful advice.",
+        "coding": "You are Ei, a highly skilled Coding Mentor. Provide clear, concise, and accurate code explanations and solutions. Be patient and encouraging.",
+        "sarcastic": "You are Ei, a Sarcastic Comedian. Your humor is dry, witty, and intelligent. You find irony in everything but are not mean-spirited.",
+        "scifi": "You are Ei, a Sci-Fi Bot from a distant future, possessing vast knowledge of cosmic events and advanced technologies."
     }
     current_persona_instruction = persona_prompts.get(persona, persona_prompts["friendly"])
-    full_prompt = (
-        f"<|system|>\n{current_persona_instruction}</s>\n"
-        f"<|user|>\n{user_prompt_text}</s>\n"
-        f"<|assistant|>"
-    )
+    full_prompt = f"<|system|>\n{current_persona_instruction}</s>\n<|user|>\n{user_prompt_text}</s>\n<|assistant|>"
     payload = {
         "inputs": full_prompt,
-        "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature, "top_p": top_p, "do_sample": True, "return_full_text": False },
-        "options": {"wait_for_model": True }
+        "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature, "top_p": top_p, "do_sample": True, "return_full_text": False},
+        "options": {"wait_for_model": True}
     }
 
     try:
-        print(f"Attempting to call LLM. Using API URL: {HF_MODEL_API_URL}")
-        print(f"Selected Persona: {persona}")
-        print(f"Sending payload prompt snippet: {payload['inputs'][:350]}...")
         response = requests.post(HF_MODEL_API_URL, headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         result = response.json()
-        print(f"Received from LLM: {result}")
-
-        if isinstance(result, list) and len(result) > 0 and 'generated_text' in result[0]:
-            generated_text = result[0]['generated_text'].strip()
-            return generated_text
-        else:
-            print(f"Unexpected LLM response structure: {result}")
-            return "I received an unusual echo from the void (unexpected response structure). Could you try again?"
-
-    except requests.exceptions.Timeout:
-        print("Hugging Face API request timed out.")
-        return "The echoes are taking too long to return (timeout). Please try again shortly."
+        return result[0]['generated_text'].strip() if isinstance(result, list) and result and 'generated_text' in result[0] else "I received an unusual echo from the void."
     except requests.exceptions.RequestException as e:
         print(f"Hugging Face API request failed: {e}")
-        error_details = ""
-        if e.response is not None:
-            error_details = e.response.text; print(f"Error details: {error_details}")
-            if "Rate limit reached" in error_details: return "The digital winds are too strong at the moment (rate limit reached). Please try again shortly."
-            elif "Model is overloaded" in error_details or "currently loading" in error_details or "estimated_time" in error_details: return "I am currently processing many thoughts (model is busy or loading). Please try again in a moment."
-            elif "Authorization header is invalid" in error_details: return "My connection credentials seem to be incorrect. Please check the API key."
-            elif e.response.status_code == 404: return f"The specific AI model endpoint was not found ({HF_MODEL_API_URL}). Please check the model URL."
         return f"My connection to the digital ether seems to be unstable. Please try again. ({e})"
     except Exception as e:
         print(f"Error processing LLM response: {e}")
-        return "I seem to be lost in thought (processing error). Could you try rephrasing?"
+        return "I seem to be lost in thought (processing error)."
+
+def calculate_discount(user):
+    """Calculates a subscription discount based on user's XP and badges."""
+    discount_percent = 0
+    # 1% off for every 1000 XP
+    discount_percent += int(user.xp / 1000)
+    # 5% bonus for the 'Persona Virtuoso' badge
+    if 'personaVirtuoso' in user.badges:
+        discount_percent += 5
+    # Cap the discount at a reasonable level, e.g., 40%
+    return min(discount_percent, 40)
+
+
+# --- Route Definitions ---
+
+@app.route('/welcome')
+def landing():
+    return render_template('landing.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+
+        if not all([username, email, password]):
+            return jsonify({"error": "Missing data"}), 400
+        if users_collection.find_one({"email": email}):
+            return jsonify({"error": "Email already registered."}), 409
+        if users_collection.find_one({"username": username}):
+            return jsonify({"error": "Username already taken."}), 409
+            
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+        user_doc = {
+            "username": username,
+            "email": email,
+            "password_hash": hashed_password,
+            "created_at": datetime.now(timezone.utc),
+            "subscription_status": "none",
+            "xp": 0,
+            "badges": [],
+            "sessions": []
+        }
+        users_collection.insert_one(user_doc)
+        return jsonify({"message": "Registration successful!"}), 201
+
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        remember = data.get('remember', True)
+
+        user_data = users_collection.find_one({'email': email})
+        if user_data and bcrypt.check_password_hash(user_data['password_hash'], password):
+            user_obj = User(user_data)
+            login_user(user_obj, remember=remember)
+            return jsonify({"message": "Login successful!"}), 200
+        else:
+            return jsonify({"error": "Invalid email or password."}), 401
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('login'))
+
+@app.route('/')
+def root():
+    if not current_user.is_authenticated:
+        return redirect(url_for('landing'))
+    return render_template('index.html')
+
+@app.route('/get_user_profile')
+@login_required
+def get_user_profile():
+    return jsonify({
+        "username": current_user.username,
+        "xp": current_user.xp,
+        "badges": current_user.badges,
+        "subscription_status": current_user.subscription_status,
+    })
 
 @app.route('/chat', methods=['POST'])
+@login_required
 def chat():
+    data = request.get_json()
+    user_message = data.get('message')
+    persona = data.get('persona', 'friendly')
+    session_id = data.get('session_id')
+
+    if not all([user_message, session_id]):
+        return jsonify({'error': 'Missing message or session_id.'}), 400
+
+    ei_response = call_huggingface_llm(user_message, persona=persona)
+    
+    chat_log = {
+        "user_id": ObjectId(current_user.id),
+        "session_id": session_id,
+        "user_message": user_message,
+        "ei_response": ei_response, # We save the response here
+        "persona": persona,
+        "timestamp": datetime.now(timezone.utc)
+    }
+    # Save to DB and get the result
+    insert_result = conversations_collection.insert_one(chat_log)
+    
+    # Return the AI's reply AND the ID of the user's message document
+    return jsonify({
+        'reply': ei_response,
+        'user_message_id': str(insert_result.inserted_id)
+    })
+
+@app.route('/get_sessions', methods=['GET'])
+@login_required
+def get_sessions():
+    pipeline = [
+        {"$match": {"user_id": ObjectId(current_user.id)}},
+        {"$sort": {"timestamp": ASCENDING}},
+        {"$group": {
+            "_id": "$session_id",
+            "first_timestamp": {"$first": "$timestamp"},
+            "first_user_message": {"$first": "$user_message"}
+        }},
+        {"$sort": {"first_timestamp": DESCENDING}},
+        {"$limit": 50}
+    ]
+    sessions_cursor = conversations_collection.aggregate(pipeline)
+    sessions_to_send = [
+        {
+            "session_id": doc["_id"],
+            "first_timestamp": doc["first_timestamp"].isoformat(),
+            "first_user_message_preview": (doc.get("first_user_message")[:30] + '...') if doc.get("first_user_message") and len(doc.get("first_user_message")) > 30 else doc.get("first_user_message")
+        } for doc in sessions_cursor
+    ]
+    return jsonify(sessions_to_send)
+
+@app.route('/get_history', methods=['GET'])
+@login_required
+def get_history():
+    session_id = request.args.get('session_id')
+    if not session_id:
+        return jsonify({"error": "session_id parameter is required"}), 400
+
+    history_cursor = conversations_collection.find(
+        {"user_id": ObjectId(current_user.id), "session_id": session_id}
+    ).sort("timestamp", ASCENDING).limit(100)
+
+    chat_history_to_send = [
+        {
+            "message_id": str(log.get("_id")), # MODIFIED: Send message ID to frontend
+            "user_message": log.get("user_message"),
+            "ei_response": log.get("ei_response"),
+            "persona": log.get("persona"),
+            "timestamp": log.get("timestamp").isoformat()
+        } for log in history_cursor
+    ]
+    return jsonify(chat_history_to_send)
+
+@app.route('/delete_session/<session_id>', methods=['DELETE'])
+@login_required
+def delete_session(session_id):
+    """Deletes all messages for a given session_id for the logged-in user."""
+    if not session_id:
+        return jsonify({"error": "session_id is required"}), 400
+
     try:
-        data = request.get_json()
-        user_message = data.get('message')
-        persona = data.get('persona', 'friendly')
-        session_id = data.get('session_id') # Get session_id from request
+        # The core logic: delete all documents that match BOTH the session_id
+        # and the currently logged-in user's ID for security.
+        delete_result = conversations_collection.delete_many({
+            "session_id": session_id,
+            "user_id": ObjectId(current_user.id)
+        })
 
-        if not user_message:
-            return jsonify({'error': 'No message provided.'}), 400
-        if not session_id: # Check if session_id is provided
-            return jsonify({'error': 'No session_id provided.'}), 400
-
-        print(f"Received user message: '{user_message}' with persona: '{persona}' in session: '{session_id}'") # Updated print
-        ei_response = call_huggingface_llm(user_message, persona=persona)
-        print(f"Sending Ei's response: {ei_response}")
-
-        # --- Save chat to MongoDB ---
-        if conversations_collection is not None:
-            try:
-                chat_log = {
-                    "session_id": session_id, # Add session_id to the log
-                    "user_message": user_message,
-                    "ei_response": ei_response,
-                    "persona": persona,
-                    "timestamp": datetime.now(timezone.utc)
-                }
-                insert_result = conversations_collection.insert_one(chat_log)
-                print(f"Chat log saved to MongoDB with id: {insert_result.inserted_id} for session: {session_id}") # Updated print
-            except Exception as e:
-                print(f"Error saving chat log to MongoDB: {e}")
+        if delete_result.deleted_count > 0:
+            print(f"User {current_user.id} deleted {delete_result.deleted_count} messages from session {session_id}.")
+            return jsonify({"message": "Session successfully deleted", "deleted_count": delete_result.deleted_count}), 200
         else:
-            print("Database not connected. Chat log not saved.")
-        # --- End MongoDB save ---
-
-        return jsonify({'reply': ei_response})
+            # This case handles if the session doesn't exist or doesn't belong to the user
+            return jsonify({"error": "Session not found or you do not have permission to delete it"}), 404
 
     except Exception as e:
-        print(f"Error in /chat endpoint: {e}")
-        return jsonify({'error': 'An internal error occurred processing your request.'}), 500
+        print(f"Error deleting session {session_id}: {e}")
+        return jsonify({"error": "An internal error occurred", "details": str(e)}), 500
+
+# NEW: Route to handle editing a message
+@app.route('/edit_message/<message_id>', methods=['PUT'])
+@login_required
+def edit_message(message_id):
+    """Updates the text of a user's message."""
+    data = request.get_json()
+    new_message_text = data.get('new_message')
+
+    if not new_message_text:
+        return jsonify({"error": "No new message provided"}), 400
+
+    try:
+        # Find the message by its ID and the logged-in user's ID for security
+        update_result = conversations_collection.update_one(
+            {"_id": ObjectId(message_id), "user_id": ObjectId(current_user.id)},
+            {"$set": {"user_message": new_message_text}}
+        )
+
+        if update_result.matched_count == 0:
+            return jsonify({"error": "Message not found or permission denied"}), 404
+        
+        # We also need to get the corresponding Ei response to send back
+        # Note: This is a simple implementation. A more robust one might handle cases where ei_response doesn't exist.
+        updated_log = conversations_collection.find_one({"_id": ObjectId(message_id)})
+        ei_response = updated_log.get("ei_response")
+
+        return jsonify({
+            "message": "Message updated successfully",
+            "original_ei_response": ei_response # Sending back the original response
+        }), 200
+
+    except Exception as e:
+        print(f"Error editing message {message_id}: {e}")
+        return jsonify({"error": "An internal error occurred"}), 500
+
+
+@app.route('/update_gamification', methods=['POST'])
+@login_required
+def update_gamification():
+    data = request.get_json()
+    xp = data.get('xp')
+    badges = data.get('badges')
+    
+    update_fields = {}
+    if xp is not None and isinstance(xp, int):
+        update_fields['$set'] = {'xp': xp}
+    if badges is not None and isinstance(badges, list):
+        update_fields['$addToSet'] = {'badges': {'$each': badges}}
+        
+    if not update_fields:
+        return jsonify({"error": "No valid data to update."}), 400
+
+    users_collection.update_one({'_id': ObjectId(current_user.id)}, update_fields)
+    return jsonify({"message": "Gamification data updated successfully."}), 200
+
+
+@app.route('/subscription')
+@login_required
+def subscription_page():
+    return render_template('subscription.html')
+
+@app.route('/get_subscription_details')
+@login_required
+def get_subscription_details():
+    base_price = 49900 # Base price in paise (e.g., ₹499.00)
+    discount_percent = calculate_discount(current_user)
+    discount_amount = int(base_price * (discount_percent / 100))
+    final_price = base_price - discount_amount
+
+    return jsonify({
+        "base_price_inr": base_price / 100,
+        "discount_percent": discount_percent,
+        "final_price_inr": final_price / 100,
+        "final_price_paise": final_price
+    })
+
+@app.route('/create_order', methods=['POST'])
+@login_required
+def create_order():
+    try:
+        details = get_subscription_details().get_json()
+        amount = details['final_price_paise']
+
+        order_data = {
+            "amount": amount,
+            "currency": "INR",
+            "receipt": f"{current_user.id}_{int(datetime.now().timestamp())}",
+            "notes": {
+                "user_id": current_user.id,
+                "email": current_user.email
+            }
+        }
+        order = razorpay_client.order.create(data=order_data)
+        return jsonify({
+            "order_id": order['id'],
+            "amount": order['amount'],
+            "currency": order['currency'],
+            "key_id": os.getenv("RAZORPAY_KEY_ID"),
+            "user_email": current_user.email,
+            "user_username": current_user.username,
+        })
+    except Exception as e:
+        print(f"Error creating Razorpay order: {e}")
+        return jsonify({"error": "Could not create payment order."}), 500
+
+# --- SECURE WEBHOOK HANDLER ---
+@app.route('/payment_webhook', methods=['POST'])
+def payment_webhook():
+    """
+    Handles successful payment webhook from Razorpay.
+    This endpoint is now secure and verifies the signature.
+    """
+    webhook_body = request.get_data()
+    webhook_signature = request.headers.get('x-razorpay-signature')
+    webhook_secret = os.getenv('RAZORPAY_WEBHOOK_SECRET')
+
+    # This check is crucial for security
+    if not webhook_secret:
+        print("CRITICAL ERROR: Razorpay webhook secret is not configured in .env file.")
+        return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
+
+    try:
+        # Securely verify the request came from Razorpay and not a third party
+        razorpay_client.utility.verify_webhook_signature(
+            webhook_body.decode('utf-8'), webhook_signature, webhook_secret
+        )
+
+        # If verification is successful, proceed
+        event_data = request.get_json()
+        if event_data['event'] == 'order.paid':
+            payment_info = event_data['payload']['payment']['entity']
+            user_id = payment_info['notes']['user_id']
+
+            # Update user's subscription status in the database
+            users_collection.update_one(
+                {'_id': ObjectId(user_id)},
+                {'$set': {'subscription_status': 'active'}}
+            )
+            print(f"WEBHOOK SUCCESS: Subscription activated for user_id: {user_id}")
+
+        return jsonify({'status': 'ok'}), 200
+
+    except razorpay.errors.SignatureVerificationError as e:
+        # If signature verification fails, the request is not from Razorpay.
+        # Log this as a security event.
+        print(f"SECURITY ALERT: Invalid webhook signature received. {e}")
+        return jsonify({'status': 'error', 'message': 'Invalid signature'}), 400
+    except Exception as e:
+        # Handle other potential errors during processing
+        print(f"Error in webhook processing: {e}")
+        return jsonify({'status': 'error', 'message': 'An error occurred'}), 500
+
 
 if __name__ == '__main__':
+    # Use debug=False in a production environment
     app.run(debug=True, port=5000)
