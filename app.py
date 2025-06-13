@@ -24,9 +24,10 @@ if not app.config['SECRET_KEY']:
 # Initialize Extensions
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
-login_manager.login_view = 'login' # Redirect to /login if user is not authenticated
+# UPDATED: The login view now points to our new unified auth page function
+login_manager.login_view = 'auth_page'
 login_manager.login_message_category = 'info'
-login_manager.login_message = "Please log in to access this page."
+login_manager.login_message = "Please log in or register to access this page."
 
 # Hugging Face API Configuration
 HF_MODEL_API_URL = os.getenv("HF_MODEL_API_URL", "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta")
@@ -40,7 +41,7 @@ try:
     print("Successfully connected to MongoDB!")
     db = mongo_client.ei_chatbot
     conversations_collection = db.conversations
-    users_collection = db.users # NEW: Users collection
+    users_collection = db.users
     users_collection.create_index("email", unique=True)
     users_collection.create_index("username", unique=True)
 except Exception as e:
@@ -73,7 +74,7 @@ def load_user(user_id):
     user_data = users_collection.find_one({'_id': ObjectId(user_id)})
     return User(user_data) if user_data else None
 
-# --- Helper Functions ---
+# --- Helper Functions (No changes needed here) ---
 
 def call_huggingface_llm(user_prompt_text, persona="friendly", max_new_tokens=200, temperature=0.75, top_p=0.9):
     if not HF_API_KEY or not HF_MODEL_API_URL:
@@ -139,75 +140,77 @@ def calculate_discount(user):
 
 # --- Route Definitions ---
 
-@app.route('/welcome')
-def landing():
-    return render_template('landing.html')
+# NEW: Unified route for the landing/auth page
+@app.route('/auth')
+def auth_page():
+    """Renders the new single-page for welcome, login, and registration."""
+    if current_user.is_authenticated:
+        return redirect(url_for('root'))
+    return render_template('auth.html')
 
-@app.route('/register', methods=['GET', 'POST'])
+
+# UPDATED: The /register route now only handles the POST request.
+@app.route('/register', methods=['POST'])
 def register():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-    if request.method == 'POST':
-        data = request.get_json()
-        username = data.get('username')
-        email = data.get('email')
-        password = data.get('password')
+    data = request.get_json()
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
 
-        if not all([username, email, password]):
-            return jsonify({"error": "Missing data"}), 400
-        if users_collection.find_one({"email": email}):
-            return jsonify({"error": "Email already registered."}), 409
-        if users_collection.find_one({"username": username}):
-            return jsonify({"error": "Username already taken."}), 409
-            
-        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-        user_doc = {
-            "username": username,
-            "email": email,
-            "password_hash": hashed_password,
-            "created_at": datetime.now(timezone.utc),
-            "subscription_status": "none",
-            "xp": 0,
-            "badges": [],
-            "sessions": []
-        }
-        users_collection.insert_one(user_doc)
-        return jsonify({"message": "Registration successful!"}), 201
+    if not all([username, email, password]):
+        return jsonify({"error": "Missing data"}), 400
+    if users_collection.find_one({"email": email}):
+        return jsonify({"error": "Email already registered."}), 409
+    if users_collection.find_one({"username": username}):
+        return jsonify({"error": "Username already taken."}), 409
+        
+    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+    user_doc = {
+        "username": username,
+        "email": email,
+        "password_hash": hashed_password,
+        "created_at": datetime.now(timezone.utc),
+        "subscription_status": "none",
+        "xp": 0,
+        "badges": [],
+        "sessions": []
+    }
+    users_collection.insert_one(user_doc)
+    return jsonify({"message": "Registration successful!"}), 201
 
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET', 'POST'])
+# UPDATED: The /login route now only handles the POST request.
+@app.route('/login', methods=['POST'])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-    if request.method == 'POST':
-        data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
-        remember = data.get('remember', True)
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    remember = data.get('remember', True)
 
-        user_data = users_collection.find_one({'email': email})
-        if user_data and bcrypt.check_password_hash(user_data['password_hash'], password):
-            user_obj = User(user_data)
-            login_user(user_obj, remember=remember)
-            return jsonify({"message": "Login successful!"}), 200
-        else:
-            return jsonify({"error": "Invalid email or password."}), 401
-            
-    return render_template('login.html')
+    user_data = users_collection.find_one({'email': email})
+    if user_data and bcrypt.check_password_hash(user_data['password_hash'], password):
+        user_obj = User(user_data)
+        login_user(user_obj, remember=remember)
+        return jsonify({"message": "Login successful!"}), 200
+    else:
+        return jsonify({"error": "Invalid email or password."}), 401
 
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     flash('You have been logged out.', 'success')
-    return redirect(url_for('login'))
+    # UPDATED: Redirect to the new auth page after logout
+    return redirect(url_for('auth_page'))
 
+# UPDATED: The root route now directs unauthenticated users to the new auth page
 @app.route('/')
 def root():
     if not current_user.is_authenticated:
-        return redirect(url_for('landing'))
+        return redirect(url_for('auth_page'))
+    # Authenticated users are sent to the main app (index.html)
     return render_template('index.html')
+
+# --- All other routes below this line remain the same ---
 
 @app.route('/get_user_profile')
 @login_required
@@ -236,14 +239,12 @@ def chat():
         "user_id": ObjectId(current_user.id),
         "session_id": session_id,
         "user_message": user_message,
-        "ei_response": ei_response, # We save the response here
+        "ei_response": ei_response,
         "persona": persona,
         "timestamp": datetime.now(timezone.utc)
     }
-    # Save to DB and get the result
     insert_result = conversations_collection.insert_one(chat_log)
     
-    # Return the AI's reply AND the ID of the user's message document
     return jsonify({
         'reply': ei_response,
         'user_message_id': str(insert_result.inserted_id)
@@ -286,7 +287,7 @@ def get_history():
 
     chat_history_to_send = [
         {
-            "message_id": str(log.get("_id")), # MODIFIED: Send message ID to frontend
+            "message_id": str(log.get("_id")),
             "user_message": log.get("user_message"),
             "ei_response": log.get("ei_response"),
             "persona": log.get("persona"),
@@ -298,60 +299,45 @@ def get_history():
 @app.route('/delete_session/<session_id>', methods=['DELETE'])
 @login_required
 def delete_session(session_id):
-    """Deletes all messages for a given session_id for the logged-in user."""
     if not session_id:
         return jsonify({"error": "session_id is required"}), 400
-
     try:
-        # The core logic: delete all documents that match BOTH the session_id
-        # and the currently logged-in user's ID for security.
         delete_result = conversations_collection.delete_many({
             "session_id": session_id,
             "user_id": ObjectId(current_user.id)
         })
-
         if delete_result.deleted_count > 0:
             print(f"User {current_user.id} deleted {delete_result.deleted_count} messages from session {session_id}.")
             return jsonify({"message": "Session successfully deleted", "deleted_count": delete_result.deleted_count}), 200
         else:
-            # This case handles if the session doesn't exist or doesn't belong to the user
             return jsonify({"error": "Session not found or you do not have permission to delete it"}), 404
-
     except Exception as e:
         print(f"Error deleting session {session_id}: {e}")
         return jsonify({"error": "An internal error occurred", "details": str(e)}), 500
 
-# NEW: Route to handle editing a message
 @app.route('/edit_message/<message_id>', methods=['PUT'])
 @login_required
 def edit_message(message_id):
-    """Updates the text of a user's message."""
     data = request.get_json()
     new_message_text = data.get('new_message')
 
     if not new_message_text:
         return jsonify({"error": "No new message provided"}), 400
-
     try:
-        # Find the message by its ID and the logged-in user's ID for security
         update_result = conversations_collection.update_one(
             {"_id": ObjectId(message_id), "user_id": ObjectId(current_user.id)},
             {"$set": {"user_message": new_message_text}}
         )
-
         if update_result.matched_count == 0:
             return jsonify({"error": "Message not found or permission denied"}), 404
         
-        # We also need to get the corresponding Ei response to send back
-        # Note: This is a simple implementation. A more robust one might handle cases where ei_response doesn't exist.
         updated_log = conversations_collection.find_one({"_id": ObjectId(message_id)})
         ei_response = updated_log.get("ei_response")
 
         return jsonify({
             "message": "Message updated successfully",
-            "original_ei_response": ei_response # Sending back the original response
+            "original_ei_response": ei_response
         }), 200
-
     except Exception as e:
         print(f"Error editing message {message_id}: {e}")
         return jsonify({"error": "An internal error occurred"}), 500
@@ -403,15 +389,11 @@ def create_order():
     try:
         details = get_subscription_details().get_json()
         amount = details['final_price_paise']
-
         order_data = {
             "amount": amount,
             "currency": "INR",
             "receipt": f"{current_user.id}_{int(datetime.now().timestamp())}",
-            "notes": {
-                "user_id": current_user.id,
-                "email": current_user.email
-            }
+            "notes": { "user_id": current_user.id, "email": current_user.email }
         }
         order = razorpay_client.order.create(data=order_data)
         return jsonify({
@@ -426,54 +408,36 @@ def create_order():
         print(f"Error creating Razorpay order: {e}")
         return jsonify({"error": "Could not create payment order."}), 500
 
-# --- SECURE WEBHOOK HANDLER ---
 @app.route('/payment_webhook', methods=['POST'])
 def payment_webhook():
-    """
-    Handles successful payment webhook from Razorpay.
-    This endpoint is now secure and verifies the signature.
-    """
     webhook_body = request.get_data()
     webhook_signature = request.headers.get('x-razorpay-signature')
     webhook_secret = os.getenv('RAZORPAY_WEBHOOK_SECRET')
 
-    # This check is crucial for security
     if not webhook_secret:
         print("CRITICAL ERROR: Razorpay webhook secret is not configured in .env file.")
         return jsonify({'status': 'error', 'message': 'Internal server error'}), 500
-
     try:
-        # Securely verify the request came from Razorpay and not a third party
         razorpay_client.utility.verify_webhook_signature(
             webhook_body.decode('utf-8'), webhook_signature, webhook_secret
         )
-
-        # If verification is successful, proceed
         event_data = request.get_json()
         if event_data['event'] == 'order.paid':
             payment_info = event_data['payload']['payment']['entity']
             user_id = payment_info['notes']['user_id']
-
-            # Update user's subscription status in the database
             users_collection.update_one(
                 {'_id': ObjectId(user_id)},
                 {'$set': {'subscription_status': 'active'}}
             )
             print(f"WEBHOOK SUCCESS: Subscription activated for user_id: {user_id}")
-
         return jsonify({'status': 'ok'}), 200
-
     except razorpay.errors.SignatureVerificationError as e:
-        # If signature verification fails, the request is not from Razorpay.
-        # Log this as a security event.
         print(f"SECURITY ALERT: Invalid webhook signature received. {e}")
         return jsonify({'status': 'error', 'message': 'Invalid signature'}), 400
     except Exception as e:
-        # Handle other potential errors during processing
         print(f"Error in webhook processing: {e}")
         return jsonify({'status': 'error', 'message': 'An error occurred'}), 500
 
 
 if __name__ == '__main__':
-    # Use debug=False in a production environment
     app.run(debug=True, port=5000)
