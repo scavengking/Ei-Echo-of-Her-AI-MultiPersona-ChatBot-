@@ -12,8 +12,11 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "autoprefixer": "^10.4.21", 
-  "postcss": "^8.5.3",       
-  "tailwindcss": "^3.0.0" 
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.0.0"
+  },
+  "dependencies": {
+    "ogl": "^1.0.11"
   }
 }

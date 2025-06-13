@@ -6,8 +6,9 @@
     <title>Welcome - Ei</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
 
         html {
@@ -17,9 +18,9 @@
         body {
             margin: 0;
             padding: 0;
-            background: #0a0615;
-            font-family: 'Inter', sans-serif;
-            color: #d1c4e9;
+            background: #0c0018; /* Deep cosmic purple */
+            font-family: 'Georgia', serif; /* Poetic serif font */
+            color: #d0c9f0;
             overflow-x: hidden;
         }
 
@@ -31,165 +32,215 @@
             align-items: center;
             text-align: center;
             position: relative;
-            background: radial-gradient(ellipse at center, #1e102f 0%, #0a0615 70%, #000000 100%);
+            background: radial-gradient(ellipse at center, #120020 0%, #0c0018 100%);
             overflow: hidden;
         }
-
-        .welcome-section h1 {
-            font-family: 'Lora', serif;
-            font-size: 6rem;
-            color: #e879f9;
-            text-shadow: 0 0 40px rgba(232, 121, 249, 0.4);
-            opacity: 0;
-            transform: scale(0.8);
-        }
-
-        .welcome-section h2 {
-            font-size: 1.5rem;
-            font-weight: 300;
-            color: #b89df5;
-            margin-top: 1rem;
-            opacity: 0;
-        }
-
-        .welcome-section p {
-            font-family: 'Lora', serif;
-            font-style: italic;
-            font-weight: 300;
-            color: #a78bfa;
-            margin-top: 1rem;
-            font-size: 1.25rem;
-            max-width: 600px;
-            opacity: 0;
-        }
-
-        #particle-canvas {
+        
+        .orb-backdrop {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             z-index: 1;
         }
+        .orb-backdrop::before {
+            content: '';
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(81, 6, 46, 0.2) 0%, rgba(81, 6, 46, 0) 65%);
+            animation: pulse-orb 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            border-radius: 50%;
+        }
 
-        #welcome-content {
-            position: relative;
-            z-index: 2;
-            pointer-events: none;
+        @keyframes pulse-orb {
+            0% { transform: scale(0.95); opacity: 0.7; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.7; }
         }
         
-        #scroll-down-prompt {
-            position: absolute;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 3;
+        .welcome-section .logo-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
             opacity: 0;
-            cursor: pointer;
-            pointer-events: auto;
+            transform: scale(0.8);
         }
 
-        #scroll-down-prompt .chevron {
-            display: block;
-            width: 28px;
-            height: 28px;
-            border-bottom: 2px solid #a78bfa;
-            border-right: 2px solid #a78bfa;
-            transform: rotate(45deg);
-            margin: -10px auto;
-            animation: bounce 2s infinite;
+        .ei-title-final {
+    font-family: 'Lora', serif;
+    font-size: 10rem;
+    font-weight: 700;
+    background: linear-gradient(to right, #7e22ce, #ea580c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0px 0px 15px rgba(236, 72, 153, 0.5);
+}
+
+.title-sparkle {
+    width: 60px;
+    height: 60px;
+    color: #f9a8d4;
+    filter: drop-shadow(0 0 15px #f9a8d4);
+    animation: sparkle-pulse 3s ease-in-out infinite;
+}
+
+        @keyframes sparkle-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.15); opacity: 0.8; }
         }
+        
+        .subtitle-container p {
+            margin-top: 20px;
+            font-size: 20px;
+            color: #d0c9f0;
+            font-style: italic;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+        }
+        
+        .echo-text span, .subtitle-text span {
+            display: inline-block;
+            opacity: 0; /* Start hidden, controlled by GSAP */
+            transform: translateY(20px); /* Start slightly lower, controlled by GSAP */
+        }
+
+
+        #particle-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; }
+        #welcome-content { position: relative; z-index: 3; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        #scroll-down-prompt { position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%); z-index: 4; opacity: 0; cursor: pointer; pointer-events: auto; }
+        #scroll-down-prompt .chevron { display: block; width: 28px; height: 28px; border-bottom: 2px solid #a78bfa; border-right: 2px solid #a78bfa; transform: rotate(45deg); margin: -10px auto; animation: bounce 2s infinite; }
 
         @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% {
-                transform: translateY(0) rotate(45deg);
-            }
-            40% {
-                transform: translateY(-20px) rotate(45deg);
-            }
-            60% {
-                transform: translateY(-10px) rotate(45deg);
-            }
-        }
-
-        .auth-section-layout {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            align-items: center;
-            width: 100%;
-            padding: 2rem;
-            gap: 2rem;
-        }
-
-        .auth-prompt-panel {
-            padding: 2rem;
-            text-align: left;
-            position: relative;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0) rotate(45deg); }
+            40% { transform: translateY(-20px) rotate(45deg); }
+            60% { transform: translateY(-10px) rotate(45deg); }
         }
         
-        .prompt-image {
-            width: 100%;
-            max-width: 450px;
-            height: 300px;
-            margin-bottom: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 0 30px rgba(232, 121, 249, 0.2);
-            object-fit: cover;
-            transition: opacity 1s ease-in-out;
+        .auth-section-layout { display: grid; grid-template-columns: 1fr 1fr; align-items: center; width: 100%; padding: 2rem; gap: 2rem; }
+        .auth-prompt-panel { padding: 2rem; text-align: left; position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+        .prompt-image { width: 100%; max-width: 450px; height: 300px; margin-bottom: 2rem; border-radius: 1rem; box-shadow: 0 0 30px rgba(81, 6, 46, 0.2); object-fit: cover; transition: opacity 1s ease-in-out; }
+        .prompt-text-container h3 { font-family: 'Lora', serif; font-size: 2rem; color: #b983ff; margin-bottom: 1rem; }
+        .prompt-text-container p { font-family: 'Inter', sans-serif; font-size: 1.1rem; color: #a78bfa; min-height: 100px; }
+        .auth-form-panel { display: flex; justify-content: center; align-items: center; }
+        .form-container { width: 100%; max-width: 450px; background-color: rgba(17, 24, 39, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(81, 6, 46, 0.3); border-radius: 1rem; padding: 2.5rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+
+        .form-container input[type="email"], .form-container input[type="password"], .form-container input[type="text"] {
+            transition: box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out;
+            font-family: 'Inter', sans-serif;
+        }
+        .form-container input:focus {
+            border-color: #a78bfa;
+            box-shadow: 0 0 20px rgba(167, 139, 250, 0.4);
         }
 
-        .prompt-text-container h3 {
+        #gooey-nav-container {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 120px; 
+            height: 120px;
+            z-index: 50;
+            cursor: pointer;
+        }
+        #gooey-nav-canvas {
+            filter: url(#gooey);
+        }
+
+        .site-footer {
+            background-color: #0c0018;
+            padding: 6rem 2rem 4rem;
+            text-align: center;
+            color: #9ca3af;
+            border-top: 1px solid rgba(81, 6, 46, 0.2);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto 4rem auto;
+            text-align: left;
+        }
+
+        .footer-section h4 {
             font-family: 'Lora', serif;
-            font-size: 2rem;
-            color: #e879f9;
+            font-size: 1.25rem;
+            color: #b983ff;
             margin-bottom: 1rem;
         }
-
-        .prompt-text-container p {
-            font-size: 1.1rem;
-            color: #b89df5;
-            min-height: 100px;
+        
+        .footer-section p, .footer-section a {
+            color: #d1c4e9;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        .footer-section a:hover {
+            color: #e879f9;
         }
 
-        .auth-form-panel {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .form-container {
+        .constellation {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            max-width: 450px;
-            background-color: rgba(17, 24, 39, 0.8);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(167, 139, 250, 0.2);
-            border-radius: 1rem;
-            padding: 2.5rem;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 5s infinite;
+        }
+        @keyframes twinkle {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 0.8; }
         }
 
         @media (max-width: 900px) {
-            .auth-section-layout {
-                grid-template-columns: 1fr;
-            }
-            .auth-prompt-panel {
-                display: none; 
-            }
+            .auth-section-layout { grid-template-columns: 1fr; }
+            .auth-prompt-panel { display: none; }
+            .welcome-section .ei-title-final { font-size: 6rem; }
+            .title-sparkle { width: 40px; height: 40px; }
+            .orb-backdrop::before { width: 400px; height: 400px; }
+            #gooey-nav-container { width: 100px; height: 100px; }
         }
     </style>
 </head>
 <body>
+    <svg style="position:absolute; width:0; height:0;">
+        <defs>
+            <filter id="gooey">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
+                <feBlend in="SourceGraphic" in2="goo" />
+            </filter>
+        </defs>
+    </svg>
 
     <section id="welcome" class="section-container welcome-section">
+        <div class="constellation"></div>
+        <div id="gooey-nav-container"></div>
+        <div class="orb-backdrop"></div>
         <canvas id="particle-canvas"></canvas>
         <div id="welcome-content">
-            <h1 id="title">Ei</h1>
-            <h2 id="subtitle">Welcome to Ei</h2>
-            <p id="quote">"From fragments of thought, she came to listen."</p>
+            <div id="title" class="logo-section">
+                <svg class="title-sparkle" viewBox="0 0 100 100" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M50 0L61.2 38.8L100 50L61.2 61.2L50 100L38.8 61.2L0 50L38.8 38.8L50 0Z"/>
+                </svg>
+                <h1 class="ei-title-final">Ei</h1>
+            </div>
+            <div class="subtitle-container">
+                <p id="echo" class="echo-text"></p>
+                <p id="subtitle" class="subtitle-text"></p>
+            </div>
         </div>
         <a id="scroll-down-prompt" href="#auth-forms">
             <span class="chevron"></span>
@@ -205,18 +256,17 @@
                     <p id="prompt-fact">Ei can be a friendly companion, a wise sage, a coding mentor, or even a sarcastic comedian. Choose the persona that fits your mood.</p>
                 </div>
             </div>
-
             <div class="auth-form-panel">
                 <div id="login-container" class="form-container">
                     <h2 class="text-3xl font-bold text-center text-violet-400 mb-6">Login to Ei</h2>
                     <form id="login-form">
                         <div class="mb-4">
                             <label for="login-email" class="block text-sm font-medium text-gray-400 mb-2">Email</label>
-                            <input type="email" id="login-email" name="email" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none transition">
+                            <input type="email" id="login-email" name="email" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none">
                         </div>
                         <div class="mb-6">
                             <label for="login-password" class="block text-sm font-medium text-gray-400 mb-2">Password</label>
-                            <input type="password" id="login-password" name="password" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none transition">
+                            <input type="password" id="login-password" name="password" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none">
                         </div>
                         <p id="login-error-message" class="text-red-400 text-sm mb-4 text-center hidden"></p>
                         <button type="submit" class="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 px-4 rounded-lg transition duration-300">Login</button>
@@ -225,21 +275,20 @@
                         Don't have an account? <a href="#" id="show-register" class="text-violet-400 hover:underline">Register here</a>
                     </p>
                 </div>
-
                 <div id="register-container" class="form-container hidden">
                     <h2 class="text-3xl font-bold text-center text-violet-400 mb-6">Create your Echo</h2>
                     <form id="register-form">
                         <div class="mb-4">
                             <label for="register-username" class="block text-sm font-medium text-gray-400 mb-2">Username</label>
-                            <input type="text" id="register-username" name="username" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none transition">
+                            <input type="text" id="register-username" name="username" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none">
                         </div>
                         <div class="mb-4">
                             <label for="register-email" class="block text-sm font-medium text-gray-400 mb-2">Email</label>
-                            <input type="email" id="register-email" name="email" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none transition">
+                            <input type="email" id="register-email" name="email" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none">
                         </div>
                         <div class="mb-4">
                             <label for="register-password" class="block text-sm font-medium text-gray-400 mb-2">Password</label>
-                            <input type="password" id="register-password" name="password" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none transition">
+                            <input type="password" id="register-password" name="password" required class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-violet-500 outline-none">
                         </div>
                         <p id="register-error-message" class="text-red-400 text-sm mb-4 text-center hidden"></p>
                         <p id="register-success-message" class="text-green-400 text-sm mb-4 text-center hidden"></p>
@@ -253,93 +302,228 @@
         </div>
     </section>
 
-    <!-- Self-contained JavaScript for THIS PAGE ONLY -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <footer id="site-footer" class="site-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>About Ei</h4>
+                <p>Ei is a conceptual AI companion, an echo of admiration brought to life through code. She is designed to be a poetic, insightful, and empathetic partner in conversation, exploring the nuances of thought and existence.</p>
+            </div>
+            <div class="footer-section">
+                <h4>Contact Us</h4>
+                <p>For inquiries, support, or to share your thoughts, please reach out to us. We value your connection.</p>
+                <a href="mailto:eiky26@gmail.com" class="block mt-2">eiky2630@gmail.com</a>
+            </div>
+            <div class="footer-section">
+                <h4>Follow the Journey</h4>
+                <p>Stay connected with the development and story of Ei through our social channels.</p>
+                <div class="flex space-x-4 mt-2">
+                    <a href="https://www.linkedin.com/in/krishna-yadav-3616201ba/">Linkden</a>
+                    <a href="https://github.com/scavengking">GitHub</a>
+                    
+                </div>
+            </div>
+        </div>
+        <p>&copy; 2025 Ei. All rights reserved.</p>
+        <p class="text-sm text-gray-500 mt-2">Crafted with echoes in the digital ether.</p>
+    </footer>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            let scene, camera, renderer, particles;
-            const particleCount = 3000;
-            const canvas = document.getElementById('particle-canvas');
             
+            // --- Consolidated Animation Setup ---
+            
+            // Three.js Particles
+            let scene, camera, renderer, particles;
+            const particleCanvas = document.getElementById('particle-canvas');
             function initParticles() {
                 scene = new THREE.Scene();
                 camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
                 camera.position.z = 200;
-                renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+                renderer = new THREE.WebGLRenderer({ canvas: particleCanvas, alpha: true });
                 renderer.setSize(window.innerWidth, window.innerHeight);
-
                 const geometry = new THREE.BufferGeometry();
-                const positions = new Float32Array(particleCount * 3);
-                for (let i = 0; i < particleCount * 3; i++) {
-                    positions[i] = (Math.random() - 0.5) * 800;
-                }
+                const positions = new Float32Array(3000 * 3);
+                for (let i = 0; i < 3000 * 3; i++) { positions[i] = (Math.random() - 0.5) * 800; }
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                const material = new THREE.PointsMaterial({ color: 0xe879f9, size: 1.5, transparent: true, opacity: 0.7 });
+                const material = new THREE.PointsMaterial({ color: 0x51062E, size: 1.5, transparent: true, opacity: 0.7 });
                 particles = new THREE.Points(geometry, material);
                 scene.add(particles);
             }
-
             function animateParticles() {
-                requestAnimationFrame(animateParticles);
                 if (particles) {
                     particles.rotation.y += 0.0005;
                     particles.rotation.x += 0.0002;
                 }
-                renderer.render(scene, camera);
+                if(renderer && scene && camera) renderer.render(scene, camera);
             }
+
+            // Gooey Nav
+            const navContainer = document.getElementById('gooey-nav-container');
+            let navCtx, navWidth, navHeight, navTargetX, navIsHovering = false, navParticles = [];
+            const navColors = ["#A78BFA", "#C084FC", "#9F63F7", "#818CF8"];
             
+            class GooeyParticle {
+                constructor(x, y) {
+                    this.x = x; this.y = y; this.size = 2.5 + Math.random() * 2.5;
+                    this.vx = (Math.random() - 0.5) * 0.5; this.vy = (Math.random() - 0.5) * 0.5;
+                    this.color = navColors[Math.floor(Math.random() * navColors.length)];
+                }
+            }
+
+            function initNav() {
+                if (navContainer.querySelector('canvas')) return; // Already initialized
+                const canvas = document.createElement('canvas');
+                canvas.id = 'gooey-nav-canvas';
+                navContainer.appendChild(canvas);
+                navCtx = canvas.getContext('2d');
+                resizeNav();
+                
+                navParticles.length = 0;
+                for (let i = 0; i < 20; i++) {
+                    navParticles.push(new GooeyParticle(Math.random() * navWidth, Math.random() * navHeight));
+                }
+
+                navContainer.addEventListener('mouseenter', () => { navIsHovering = true; });
+                navContainer.addEventListener('mouseleave', () => { navIsHovering = false; });
+                navContainer.addEventListener('click', () => {
+                    document.getElementById('site-footer').scrollIntoView({ behavior: 'smooth' });
+                });
+            }
+             function resizeNav() {
+                if (!navContainer) return;
+                navWidth = navContainer.clientWidth;
+                navHeight = navContainer.clientHeight;
+                if(navCtx) {
+                    navCtx.canvas.width = navWidth;
+                    navCtx.canvas.height = navHeight;
+                }
+                navTargetX = navWidth / 2;
+            }
+
+            function animateNav() {
+                if (!navCtx) return;
+                navCtx.clearRect(0, 0, navWidth, navHeight);
+                navParticles.forEach(p => {
+                    const pullStrength = navIsHovering ? 0.1 : 0.03;
+                    const distToTarget = Math.hypot(p.x - navTargetX, p.y - navHeight / 2);
+                    if (distToTarget > 1) {
+                        p.vx += ((navTargetX - p.x) / distToTarget) * pullStrength;
+                        p.vy += ((navHeight / 2 - p.y) / distToTarget) * pullStrength;
+                    }
+                    p.vx *= 0.98; p.vy *= 0.98;
+                    p.x += p.vx; p.y += p.vy;
+                    if (p.x < 0 || p.x > navWidth) p.vx *= -1;
+                    if (p.y < 0 || p.y > navHeight) p.vy *= -1;
+                    
+                    navCtx.beginPath();
+                    navCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    navCtx.fillStyle = p.color;
+                    navCtx.fill();
+                });
+                navCtx.fillStyle = '#ffffff';
+                navCtx.font = '16px Inter, sans-serif';
+                navCtx.textAlign = 'center';
+                navCtx.fillText('Menu', navWidth / 2, navHeight / 2 + 6);
+            }
+
+            // Main Animation Loop
+            function masterAnimateLoop() {
+                animateParticles();
+                animateNav();
+                requestAnimationFrame(masterAnimateLoop);
+            }
+
+            // Initial Setup
+            initParticles();
+            if (navContainer) {
+                initNav();
+            }
+            masterAnimateLoop();
+
+            // Consolidated Resize Handler
             window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+                if (camera) {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                }
+                if (renderer) {
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+                if(navContainer) resizeNav();
             });
 
-            initParticles();
-            animateParticles();
-
-            gsap.to("#title", { opacity: 1, scale: 1, duration: 2, delay: 1, ease: "power2.out" });
-            gsap.to("#subtitle", { opacity: 1, duration: 1.5, delay: 2.5 });
-            gsap.to("#quote", { opacity: 1, duration: 1.5, delay: 4 });
-            gsap.to("#scroll-down-prompt", { opacity: 1, duration: 1.5, delay: 5.5 });
-
-            const prompts = [
-                {
-                    heading: "Explore Different Personas",
-                    fact: "Ei can be a friendly companion, a wise sage, a coding mentor, or even a sarcastic comedian. Choose the persona that fits your mood.",
-                    image: "https://images.unsplash.com/photo-1518975957338-b3f3b13a77b9?q=80&w=2070&auto=format&fit=crop"
-                },
-                {
-                    heading: "Your Conversations are Remembered",
-                    fact: "Continue your chat from where you left off. Ei remembers your past conversations, allowing for a seamless and evolving dialogue.",
-                     image: "https://images.unsplash.com/photo-1588421357574-87938a86fa28?q=80&w=2070&auto=format&fit=crop"
-                },
-                {
-                    heading: "Unlock Achievements",
-                    fact: "Engage with Ei to unlock badges and gain XP. Your journey of discovery is rewarded!",
-                    image: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop"
-                },
-                 {
-                    heading: "Powered by Advanced AI",
-                    fact: "Ei uses a powerful language model to provide insightful, coherent, and human-like responses, making your interaction truly unique.",
-                    image: "https://images.unsplash.com/photo-1620712943543-2858200f7426?q=80&w=1974&auto=format&fit=crop"
-                }
-            ];
+            // --- Advanced GSAP Animations ---
             
+            // 1. Prepare subtitles by splitting text into word spans
+            function setupSubtitleAnimation(elementId, text) {
+                const element = document.getElementById(elementId);
+                if (!element) return;
+                element.innerHTML = text.split(' ').map(word => `<span>${word}&nbsp;</span>`).join('');
+                return element.children;
+            }
+            
+            const echoWords = setupSubtitleAnimation('echo', 'Echo of her.');
+            const subtitleWords = setupSubtitleAnimation('subtitle', 'Born from thought.');
+
+            // 2. Create the animation timeline
+            const tl = gsap.timeline();
+
+            tl.to("#title", { opacity: 1, scale: 1, duration: 1.5, ease: "power2.out" }, 0.5)
+              .to(echoWords, { 
+                  opacity: 1, 
+                  y: 0, 
+                  duration: 0.8, 
+                  stagger: 0.2, 
+                  ease: "power3.out" 
+              }, 1.5)
+              .to(subtitleWords, { 
+                  opacity: 1, 
+                  y: 0, 
+                  duration: 0.8, 
+                  stagger: 0.2, 
+                  ease: "power3.out" 
+              }, 2.5)
+              .to("#scroll-down-prompt", { opacity: 1, duration: 1.5, ease: "power2.in" }, 4);
+
+
+            // Constellation
+            const constellationContainer = document.querySelector('.constellation');
+            if(constellationContainer) {
+                for (let i = 0; i < 80; i++) {
+                    const star = document.createElement('div');
+                    star.className = 'star';
+                    const size = Math.random() * 2 + 1;
+                    star.style.width = `${size}px`;
+                    star.style.height = `${size}px`;
+                    star.style.top = `${Math.random() * 100}%`;
+                    star.style.left = `${Math.random() * 100}%`;
+                    star.style.animationDelay = `${Math.random() * 5}s`;
+                    star.style.animationDuration = `${Math.random() * 3 + 2}s`;
+                    constellationContainer.appendChild(star);
+                }
+            }
+            
+            // Form & Prompt Logic
+          const prompts = [
+                { heading: "Explore Different Personas", fact: "Ei can be a friendly companion, a wise sage, a coding mentor, or even a sarcastic comedian. Choose the persona that fits your mood.", image: "/static/images/persona.jpg" },
+                { heading: "Your Conversations are Remembered", fact: "Continue your chat from where you left off. Ei remembers your past conversations, allowing for a seamless and evolving dialogue.", image: "/static/images/sarcastic.png" },
+                { heading: "Unlock Achievements", fact: "Engage with Ei to unlock badges and gain XP. Your journey of discovery is rewarded!", image: "/static/images/achivement.jpg" },
+                { heading: "Powered by Advanced AI", fact: "Ei uses a powerful language model to provide insightful, coherent, and human-like responses, making your interaction truly unique.", image: "/static/images/ei wallpaper.png" }
+            ];
             const promptHeading = document.getElementById('prompt-heading');
             const promptFact = document.getElementById('prompt-fact');
             const promptImage = document.getElementById('prompt-image');
             let currentPrompt = 0;
-
             function updatePrompt() {
+                if (!promptHeading || !promptFact || !promptImage) return;
                 gsap.to([promptHeading, promptFact, promptImage], { opacity: 0, duration: 0.5, onComplete: () => {
-                    if(promptHeading) promptHeading.textContent = prompts[currentPrompt].heading;
-                    if(promptFact) promptFact.textContent = prompts[currentPrompt].fact;
-                    if(promptImage) promptImage.src = prompts[currentPrompt].image;
+                    promptHeading.textContent = prompts[currentPrompt].heading;
+                    promptFact.textContent = prompts[currentPrompt].fact;
+                    promptImage.src = prompts[currentPrompt].image;
                     gsap.to([promptHeading, promptFact, promptImage], { opacity: 1, duration: 0.5 });
                     currentPrompt = (currentPrompt + 1) % prompts.length;
                 }});
             }
-
             setInterval(updatePrompt, 6000);
             updatePrompt();
             
@@ -347,97 +531,18 @@
             const registerContainer = document.getElementById('register-container');
             const showRegisterBtn = document.getElementById('show-register');
             const showLoginBtn = document.getElementById('show-login');
-
-            showRegisterBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                gsap.to(loginContainer, { opacity: 0, duration: 0.3, onComplete: () => {
-                    loginContainer.classList.add('hidden');
-                    registerContainer.classList.remove('hidden');
-                    gsap.fromTo(registerContainer, {opacity: 0}, {opacity: 1, duration: 0.3});
-                }});
-            });
-
-            showLoginBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                gsap.to(registerContainer, { opacity: 0, duration: 0.3, onComplete: () => {
-                    registerContainer.classList.add('hidden');
-                    loginContainer.classList.remove('hidden');
-                    gsap.fromTo(loginContainer, {opacity: 0}, {opacity: 1, duration: 0.3});
-                }});
-            });
+            showRegisterBtn.addEventListener('click', (e) => { e.preventDefault(); gsap.to(loginContainer, { opacity: 0, duration: 0.3, onComplete: () => { loginContainer.classList.add('hidden'); registerContainer.classList.remove('hidden'); gsap.fromTo(registerContainer, {opacity: 0}, {opacity: 1, duration: 0.3}); }}); });
+            showLoginBtn.addEventListener('click', (e) => { e.preventDefault(); gsap.to(registerContainer, { opacity: 0, duration: 0.3, onComplete: () => { registerContainer.classList.add('hidden'); loginContainer.classList.remove('hidden'); gsap.fromTo(loginContainer, {opacity: 0}, {opacity: 1, duration: 0.3}); }}); });
             
             const loginForm = document.getElementById('login-form');
             const registerForm = document.getElementById('register-form');
             const loginErrorEl = document.getElementById('login-error-message');
             const registerErrorEl = document.getElementById('register-error-message');
             const registerSuccessEl = document.getElementById('register-success-message');
-
-            const displayMessage = (element, message) => {
-                if (element) {
-                    element.textContent = message;
-                    element.classList.remove('hidden');
-                }
-            };
-            
-            const hideMessages = () => {
-                if(loginErrorEl) loginErrorEl.classList.add('hidden');
-                if(registerErrorEl) registerErrorEl.classList.add('hidden');
-                if(registerSuccessEl) registerSuccessEl.classList.add('hidden');
-            }
-
-            if (loginForm) {
-                loginForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    hideMessages();
-                    const formData = new FormData(loginForm);
-                    const data = Object.fromEntries(formData.entries());
-                    try {
-                        const response = await fetch('/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(data),
-                        });
-                        const result = await response.json();
-                        if (response.ok) {
-                            window.location.href = '/';
-                        } else {
-                            displayMessage(loginErrorEl, result.error || 'An unknown error occurred.');
-                        }
-                    } catch (error) {
-                        displayMessage(loginErrorEl, 'Could not connect to the server.');
-                    }
-                });
-            }
-
-            if (registerForm) {
-                registerForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    hideMessages();
-                    const formData = new FormData(registerForm);
-                    const data = Object.fromEntries(formData.entries());
-                    if (data.password.length < 6) {
-                        displayMessage(registerErrorEl, 'Password must be at least 6 characters long.');
-                        return;
-                    }
-                    try {
-                        const response = await fetch('/register', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(data),
-                        });
-                        const result = await response.json();
-                        if (response.ok) {
-                            displayMessage(registerSuccessEl, 'Registration successful! You can now log in.');
-                            registerForm.reset();
-                            setTimeout(() => showLoginBtn.click(), 2000);
-                        } else {
-                            displayMessage(registerErrorEl, result.error || 'An unknown error occurred.');
-                        }
-                    } catch (error) {
-                        displayMessage(registerErrorEl, 'Could not connect to the server.');
-                    }
-                });
-            }
+            const displayMessage = (element, message) => { if (element) { element.textContent = message; element.classList.remove('hidden'); } };
+            const hideMessages = () => { if(loginErrorEl) loginErrorEl.classList.add('hidden'); if(registerErrorEl) registerErrorEl.classList.add('hidden'); if(registerSuccessEl) registerSuccessEl.classList.add('hidden'); }
+            if (loginForm) { loginForm.addEventListener('submit', async (e) => { e.preventDefault(); hideMessages(); const formData = new FormData(loginForm); const data = Object.fromEntries(formData.entries()); try { const response = await fetch('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), }); const result = await response.json(); if (response.ok) { window.location.href = '/'; } else { displayMessage(loginErrorEl, result.error || 'An unknown error occurred.'); } } catch (error) { displayMessage(loginErrorEl, 'Could not connect to the server.'); } }); }
+            if (registerForm) { registerForm.addEventListener('submit', async (e) => { e.preventDefault(); hideMessages(); const formData = new FormData(registerForm); const data = Object.fromEntries(formData.entries()); if (data.password.length < 6) { displayMessage(registerErrorEl, 'Password must be at least 6 characters long.'); return; } try { const response = await fetch('/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), }); const result = await response.json(); if (response.ok) { displayMessage(registerSuccessEl, 'Registration successful! You can now log in.'); registerForm.reset(); setTimeout(() => showLoginBtn.click(), 2000); } else { displayMessage(registerErrorEl, result.error || 'An unknown error occurred.'); } } catch (error) { displayMessage(registerErrorEl, 'Could not connect to the server.'); } }); }
         });
     </script>
 </body>

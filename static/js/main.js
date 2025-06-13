@@ -1,14 +1,13 @@
 // static/js/main.js
 
 document.addEventListener('DOMContentLoaded', () => {
-    // --- KEY DOM ELEMENTS (Only for index.html) ---
+    // --- KEY DOM ELEMENTS ---
     const chatForm = document.getElementById('chat-form');
     const messageInput = document.getElementById('message-input');
     const chatMessagesContainer = document.getElementById('chat-messages');
     const typingIndicator = document.getElementById('typing-indicator');
     const emptySessionPlaceholder = document.getElementById('empty-session-placeholder');
     const earnedBadgesContainer = document.getElementById('earned-badges-container');
-    const eiNameDisplay = document.getElementById('ei-name-display');
     const xpLevelEl = document.getElementById('xp-level');
     const xpBarEl = document.getElementById('xp-bar');
     const xpCurrentEl = document.getElementById('xp-current');
@@ -20,8 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const personaQuickSelect = document.getElementById('persona-quick-select');
     const usernameDisplay = document.getElementById('username-display');
     const subscriptionLink = document.getElementById('subscription-link');
+    
+    // Elements for the persona overlay
+    const personaOverlay = document.getElementById('persona-selection-overlay');
+    const personaCards = document.querySelectorAll('.persona-card');
+    const continueToChatBtn = document.getElementById('continue-to-chat-btn');
+    const closePersonaBtn = document.getElementById('close-persona-btn');
 
-    // This check ensures the script only runs its core logic on the chat page.
     if (!chatForm) {
         console.log("Not on the main chat page. main.js will not run.");
         return;
@@ -30,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- STATE VARIABLES ---
     const LS_PERSONA_KEY = 'ei_selected_persona';
     const LS_SESSION_ID_KEY = 'ei_current_session_id';
+    const LS_PERSONA_INTRO_KEY = 'ei_has_seen_persona_intro_v1'; // We use this to track first selection
 
     let currentPersona = localStorage.getItem(LS_PERSONA_KEY) || 'friendly';
     let currentSessionId = localStorage.getItem(LS_SESSION_ID_KEY);
@@ -57,12 +62,73 @@ document.addEventListener('DOMContentLoaded', () => {
         personaVirtuoso: { id: 'personaVirtuoso', name: 'Persona Virtuoso', description: "Experienced all primary facets of Ei (all 5 personas tried).", emoji: '🌟', unlocked: false }
     };
 
-    // --- CORE INITIALIZATION ---
+    // --- CORRECTED PERSONA OVERLAY LOGIC ---
+    function setupPersonaOverlay() {
+        let selectedPersona = currentPersona;
+        
+        // Set initial active card
+        personaCards.forEach(card => {
+            if (card.dataset.persona === selectedPersona) {
+                card.classList.add('active');
+            }
+        });
+
+        personaCards.forEach(card => {
+            card.addEventListener('click', () => {
+                personaCards.forEach(c => c.classList.remove('active'));
+                card.classList.add('active');
+                selectedPersona = card.dataset.persona;
+            });
+        });
+
+        // Close button listener
+        if(closePersonaBtn) {
+            closePersonaBtn.addEventListener('click', () => {
+                // Only allow closing if a persona has been chosen before
+                if (localStorage.getItem(LS_PERSONA_KEY)) {
+                    personaOverlay.classList.remove('visible');
+                } else {
+                    alert("Please select a persona to continue.");
+                }
+            });
+        }
+
+        // Continue button listener
+        continueToChatBtn.addEventListener('click', () => {
+            currentPersona = selectedPersona;
+            localStorage.setItem(LS_PERSONA_KEY, currentPersona);
+            if (personaQuickSelect) personaQuickSelect.value = currentPersona;
+            
+            // This key is for badge logic, not for showing the panel
+            localStorage.setItem(LS_PERSONA_INTRO_KEY, 'true'); 
+            personaOverlay.classList.remove('visible');
+
+            // Log persona usage for badges
+            let personasTried = JSON.parse(localStorage.getItem('ei_personas_tried_v2') || '[]');
+            if (!personasTried.includes(currentPersona)) {
+                personasTried.push(currentPersona);
+                localStorage.setItem('ei_personas_tried_v2', JSON.stringify(personasTried));
+            }
+            checkAndAwardBadges();
+        });
+
+        // Escape key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && personaOverlay.classList.contains('visible')) {
+                // Only allow closing if a persona has been chosen before
+                 if (localStorage.getItem(LS_PERSONA_KEY)) {
+                    personaOverlay.classList.remove('visible');
+                }
+            }
+        });
+    }
+
+    // --- CORRECTED INITIALIZATION LOGIC ---
     async function initializeApp() {
         try {
             const response = await fetch('/get_user_profile');
             if (!response.ok) {
-                window.location.href = '/auth'; // Redirect to the correct auth page
+                window.location.href = '/auth';
                 return;
             }
             userProfile = await response.json();
@@ -85,6 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 startNewChatSession(false);
             }
             
+            // Always setup the listeners for the persona panel
+            setupPersonaOverlay();
+            
+            // Show the persona overlay IF no persona has EVER been selected
+            if (!localStorage.getItem(LS_PERSONA_KEY)) {
+                personaOverlay.classList.add('visible');
+            }
+            
             anime({ targets: '#main-content-area', opacity: [0, 1], duration: 800, easing: 'easeInExpo' });
 
         } catch (error) {
@@ -92,6 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = '/auth';
         }
     }
+
+    // --- ALL OTHER FUNCTIONS (No Changes) ---
 
     function updateBadgeUnlockStatus() {
         userProfile.badges.forEach(badgeId => {
@@ -335,7 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     newChatButton.addEventListener('click', () => {
         startNewChatSession(true);
-        if (historyPanel.classList.contains('open')) historyPanel.classList.remove('open');
+        if (historyPanel.classList.contains('open')) {
+            historyPanel.classList.remove('open');
+        }
     });
 
     personaQuickSelect.addEventListener('change', function() {
