@@ -10,6 +10,7 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
 
         html {
             scroll-behavior: smooth;
@@ -72,22 +73,22 @@
         }
 
         .ei-title-final {
-    font-family: 'Lora', serif;
-    font-size: 10rem;
-    font-weight: 700;
-    background: linear-gradient(to right, #7e22ce, #ea580c);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0px 0px 15px rgba(236, 72, 153, 0.5);
-}
+            font-family: 'Lora', serif;
+            font-size: 10rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #7e22ce, #ea580c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0px 0px 15px rgba(236, 72, 153, 0.5);
+        }
 
-.title-sparkle {
-    width: 60px;
-    height: 60px;
-    color: #f9a8d4;
-    filter: drop-shadow(0 0 15px #f9a8d4);
-    animation: sparkle-pulse 3s ease-in-out infinite;
-}
+        .title-sparkle {
+            width: 60px;
+            height: 60px;
+            color: #f9a8d4;
+            filter: drop-shadow(0 0 15px #f9a8d4);
+            animation: sparkle-pulse 3s ease-in-out infinite;
+        }
 
         @keyframes sparkle-pulse {
             0%, 100% { transform: scale(1); opacity: 1; }
@@ -120,7 +121,7 @@
             60% { transform: translateY(-10px) rotate(45deg); }
         }
         
-        .auth-section-layout { display: grid; grid-template-columns: 1fr 1fr; align-items: center; width: 100%; padding: 2rem; gap: 2rem; }
+        .auth-section-layout { display: grid; grid-template-columns: 1fr 1fr; align-items: center; width: 100%; max-width: 1200px; padding: 2rem; gap: 2rem; }
         .auth-prompt-panel { padding: 2rem; text-align: left; position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; }
         .prompt-image { width: 100%; max-width: 450px; height: 300px; margin-bottom: 2rem; border-radius: 1rem; box-shadow: 0 0 30px rgba(81, 6, 46, 0.2); object-fit: cover; transition: opacity 1s ease-in-out; }
         .prompt-text-container h3 { font-family: 'Lora', serif; font-size: 2rem; color: #b983ff; margin-bottom: 1rem; }
@@ -137,6 +138,7 @@
             box-shadow: 0 0 20px rgba(167, 139, 250, 0.4);
         }
 
+        /* RESTORED: Gooey Menu CSS */
         #gooey-nav-container {
             position: absolute;
             top: 1rem;
@@ -203,14 +205,21 @@
             0%, 100% { opacity: 0; }
             50% { opacity: 0.8; }
         }
-
+        
+        /* --- RESPONSIVENESS --- */
         @media (max-width: 900px) {
             .auth-section-layout { grid-template-columns: 1fr; }
             .auth-prompt-panel { display: none; }
             .welcome-section .ei-title-final { font-size: 6rem; }
             .title-sparkle { width: 40px; height: 40px; }
             .orb-backdrop::before { width: 400px; height: 400px; }
-            #gooey-nav-container { width: 100px; height: 100px; }
+            #gooey-nav-container { width: 100px; height: 100px; } /* Gooey menu resize */
+        }
+        
+        @media (max-width: 480px) {
+            .welcome-section .ei-title-final { font-size: 4.5rem; }
+            .subtitle-container p { font-size: 18px; }
+            .form-container { padding: 2rem 1.5rem; }
         }
     </style>
 </head>
@@ -319,7 +328,6 @@
                 <div class="flex space-x-4 mt-2">
                     <a href="https://www.linkedin.com/in/krishna-yadav-3616201ba/">Linkden</a>
                     <a href="https://github.com/scavengking">GitHub</a>
-                    
                 </div>
             </div>
         </div>
@@ -357,7 +365,7 @@
                 if(renderer && scene && camera) renderer.render(scene, camera);
             }
 
-            // Gooey Nav
+            // RESTORED: Gooey Nav JS
             const navContainer = document.getElementById('gooey-nav-container');
             let navCtx, navWidth, navHeight, navTargetX, navIsHovering = false, navParticles = [];
             const navColors = ["#A78BFA", "#C084FC", "#9F63F7", "#818CF8"];
@@ -429,13 +437,13 @@
             // Main Animation Loop
             function masterAnimateLoop() {
                 animateParticles();
-                animateNav();
+                animateNav(); // RESTORED
                 requestAnimationFrame(masterAnimateLoop);
             }
 
             // Initial Setup
             initParticles();
-            if (navContainer) {
+            if (navContainer) { // RESTORED
                 initNav();
             }
             masterAnimateLoop();
@@ -449,12 +457,11 @@
                 if (renderer) {
                     renderer.setSize(window.innerWidth, window.innerHeight);
                 }
-                if(navContainer) resizeNav();
+                if(navContainer) resizeNav(); // RESTORED
             });
 
             // --- Advanced GSAP Animations ---
             
-            // 1. Prepare subtitles by splitting text into word spans
             function setupSubtitleAnimation(elementId, text) {
                 const element = document.getElementById(elementId);
                 if (!element) return;
@@ -465,46 +472,27 @@
             const echoWords = setupSubtitleAnimation('echo', 'Echo of her.');
             const subtitleWords = setupSubtitleAnimation('subtitle', 'Born from thought.');
 
-            // 2. Create the animation timeline
             const tl = gsap.timeline();
-
             tl.to("#title", { opacity: 1, scale: 1, duration: 1.5, ease: "power2.out" }, 0.5)
-              .to(echoWords, { 
-                  opacity: 1, 
-                  y: 0, 
-                  duration: 0.8, 
-                  stagger: 0.2, 
-                  ease: "power3.out" 
-              }, 1.5)
-              .to(subtitleWords, { 
-                  opacity: 1, 
-                  y: 0, 
-                  duration: 0.8, 
-                  stagger: 0.2, 
-                  ease: "power3.out" 
-              }, 2.5)
+              .to(echoWords, { opacity: 1, y: 0, duration: 0.8, stagger: 0.2, ease: "power3.out" }, 1.5)
+              .to(subtitleWords, { opacity: 1, y: 0, duration: 0.8, stagger: 0.2, ease: "power3.out" }, 2.5)
               .to("#scroll-down-prompt", { opacity: 1, duration: 1.5, ease: "power2.in" }, 4);
 
-
-            // Constellation
             const constellationContainer = document.querySelector('.constellation');
             if(constellationContainer) {
                 for (let i = 0; i < 80; i++) {
                     const star = document.createElement('div');
                     star.className = 'star';
                     const size = Math.random() * 2 + 1;
-                    star.style.width = `${size}px`;
-                    star.style.height = `${size}px`;
-                    star.style.top = `${Math.random() * 100}%`;
-                    star.style.left = `${Math.random() * 100}%`;
-                    star.style.animationDelay = `${Math.random() * 5}s`;
-                    star.style.animationDuration = `${Math.random() * 3 + 2}s`;
+                    star.style.width = `${size}px`; star.style.height = `${size}px`;
+                    star.style.top = `${Math.random() * 100}%`; star.style.left = `${Math.random() * 100}%`;
+                    star.style.animationDelay = `${Math.random() * 5}s`; star.style.animationDuration = `${Math.random() * 3 + 2}s`;
                     constellationContainer.appendChild(star);
                 }
             }
             
-            // Form & Prompt Logic
-          const prompts = [
+            // --- Form & Prompt Logic ---
+            const prompts = [
                 { heading: "Explore Different Personas", fact: "Ei can be a friendly companion, a wise sage, a coding mentor, or even a sarcastic comedian. Choose the persona that fits your mood.", image: "/static/images/persona.jpg" },
                 { heading: "Your Conversations are Remembered", fact: "Continue your chat from where you left off. Ei remembers your past conversations, allowing for a seamless and evolving dialogue.", image: "/static/images/sarcastic.png" },
                 { heading: "Unlock Achievements", fact: "Engage with Ei to unlock badges and gain XP. Your journey of discovery is rewarded!", image: "/static/images/achivement.jpg" },
