@@ -14,12 +14,18 @@
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
 
+        /* Updated Body and Layout Styles */
         body {
             font-family: 'Inter', sans-serif;
-            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            max-height: -webkit-fill-available; /* Fix for mobile browsers */
             background: radial-gradient(ellipse at center, #1e102f 0%, #0a0615 70%, #000000 100%);
-            overflow: hidden;
             color: #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         #particle-canvas {
@@ -76,14 +82,6 @@
         .history-item:hover { background-color: rgba(167, 139, 250, 0.2); border-left-color: #A78BFA; }
         .history-item.active-session { background-color: rgba(167, 139, 250, 0.3); border-left-color: #A78BFA; font-weight: 600; }
         
-        #main-content-area {
-            flex-grow: 1; display: flex; flex-direction: column; height: 100vh;
-            transition: margin-left 0.4s ease-in-out;
-            position: relative; opacity: 0; /* Start hidden for fade-in */
-        }
-
-        #empty-session-placeholder.visible { opacity: 1; }
-
         #gamification-stats {
             padding: 1rem; background-color: rgba(0, 0, 0, 0.2); 
             border-radius: 0.5rem; color: #e5e7eb; font-size: 0.8rem;
@@ -115,14 +113,12 @@
             border-radius: 4px; font-size: 0.85em;
         }
 
-        /* --- Persona Selection Overlay Styles (CORRECTED) --- */
         #persona-selection-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: rgba(10, 6, 21, 0.8);
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
             display: flex; align-items: center; justify-content: center;
             z-index: 100;
-            /* CORRECTED: Control visibility and opacity for robust transitions */
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
@@ -133,7 +129,6 @@
             visibility: visible;
             pointer-events: auto;
         }
-        /* REMOVED the problematic :not(.visible) CSS rule */
 
         .persona-modal {
             background-color: rgba(23, 16, 47, 0.9);
@@ -165,7 +160,6 @@
         }
         .persona-card h3 { text-align: center; font-weight: 600; margin-top: auto; }
         
-        /* ADDED: Panel backdrop for mobile */
         #panel-backdrop {
             position: fixed; inset: 0;
             background-color: rgba(0,0,0,0.5);
@@ -178,10 +172,39 @@
             opacity: 1;
             pointer-events: auto;
         }
-        
+
+        /* Added Mobile Layout Fixes */
+        #main-content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* Crucial for proper flex child behavior */
+            width: 100%;
+            transition: margin-left 0.4s ease-in-out;
+            position: relative; 
+            opacity: 0;
+        }
+        .flex-grow.min-h-0 {
+            flex-grow: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        }
+        .chat-input-area {
+            padding-bottom: 0.5rem;
+            background-color: rgba(10, 6, 21, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(167, 139, 250, 0.1);
+        }
+
         /* --- RESPONSIVENESS (CORRECTED) --- */
-        
-        /* For Desktops (panel pushes content) */
         @media (min-width: 1024px) {
             #history-panel.open ~ #main-content-area {
                 margin-left: 300px;
@@ -191,7 +214,6 @@
             }
         }
         
-        /* For Tablets and Mobile (panel overlays content) */
         @media (max-width: 1023px) {
             #history-panel.open + #history-panel-toggle {
                 left: 20px; /* Keep toggle in place */
@@ -206,9 +228,20 @@
             .info-section { flex-direction: column; }
             .persona-modal { padding: 1.5rem; }
         }
+
+        /* Fix for mobile viewport units */
+        @supports (-webkit-touch-callout: none) {
+            body {
+                height: -webkit-fill-available;
+            }
+        }
     </style>
 </head>
 <body>
+    <div id="app-loading" class="fixed inset-0 bg-gray-900 flex items-center justify-center z-50">
+        <div class="text-violet-400 text-xl animate-pulse">Loading Ei...</div>
+    </div>
+
     <canvas id="particle-canvas"></canvas>
 
     <div id="panel-backdrop"></div>
@@ -243,17 +276,17 @@
                 </div>
             </div>
 
-            <div class="info-section">
-                <div class="flex-1">
-                    <h4><span class="text-xl mr-2">🔒</span>Your Privacy</h4>
-                    <p>Your conversations are your own. We value your privacy and ensure your data is handled securely. You can delete any chat session permanently at any time.</p>
+            <div class="info-section flex gap-8 mt-4">
+                <div class="flex-1 text-left">
+                    <h4 class="font-semibold text-lg mb-2"><span class="text-xl mr-2">🔒</span>Your Privacy</h4>
+                    <p class="text-sm text-gray-400">Your conversations are your own. We value your privacy and ensure your data is handled securely. You can delete any chat session permanently at any time.</p>
                 </div>
-                <div class="flex-1">
-                    <h4><span class="text-xl mr-2">🚀</span>Go Pro</h4>
-                    <p>Unlock unlimited chat history, access to all personas, and priority support. <a href="/subscription">Purchase our Pro plan</a> and enhance your experience.</p>
+                <div class="flex-1 text-left">
+                    <h4 class="font-semibold text-lg mb-2"><span class="text-xl mr-2">🚀</span>Go Pro</h4>
+                    <p class="text-sm text-gray-400">Unlock unlimited chat history, access to all personas, and priority support. <a href="/subscription" class="text-violet-400 hover:underline">Purchase our Pro plan</a> and enhance your experience.</p>
                 </div>
             </div>
-            <button id="continue-to-chat-btn" class="w-full max-w-xs mx-auto p-3 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg shadow-md transition-colors duration-150">Continue to Chat</button>
+            <button id="continue-to-chat-btn" class="w-full max-w-xs mx-auto mt-8 p-3 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-lg shadow-md transition-colors duration-150">Continue to Chat</button>
         </div>
     </div>
 
@@ -298,48 +331,45 @@
         </svg>
     </button>
 
-    <div id="main-content-area" class="w-full">
-        <div class="flex flex-col flex-grow h-full pt-1 pb-1 px-2 sm:px-4 md:pt-1 md:pb-2 md:px-6">
-            
-            <div class="flex justify-center items-center py-2 mb-2 md:mb-1">
-                 <h2 id="ei-name-display" class="text-2xl font-semibold ei-gradient-text" style="font-family: 'Lora', serif;">Ei</h2>
+    <div id="main-content-area">
+        <div class="flex flex-col flex-grow min-h-0 w-full max-w-5xl mx-auto px-2 sm:px-4 md:px-6">
+            <div class="flex-shrink-0 text-center py-2">
+                <h2 id="ei-name-display" class="text-2xl font-semibold ei-gradient-text" style="font-family: 'Lora', serif;">Ei</h2>
             </div>
             
-            <div class="flex-grow flex flex-col min-h-0 mb-1 sm:mb-2 max-w-5xl w-full mx-auto p-2 sm:p-4 rounded-lg shadow-xl"
-                 style="background-color: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);"> 
-                
+            <div class="flex-grow min-h-0 flex flex-col mb-2 sm:mb-2 rounded-lg shadow-xl" style="background-color: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
                 <div id="empty-session-placeholder" class="my-auto text-center text-gray-400 italic p-4 opacity-0 transition-opacity duration-500 flex-grow flex items-center justify-center"> 
                      <div>This session is empty. <br> Whisper your thoughts to Ei...</div>
                 </div>
                 <div id="chat-messages" class="flex-grow overflow-y-auto space-y-3 sm:space-y-4 p-2"></div>
             </div>
-    
-            <div id="typing-indicator" class="h-6 mb-1 text-sm text-violet-300 italic text-center" style="display: none;">Ei is typing...</div> 
             
-            <div class="flex items-end space-x-2 sm:space-x-3 max-w-5xl w-full mx-auto">
-                <div class="hidden sm:block">
-                    <select id="persona-quick-select" class="bg-slate-800/80 border border-violet-700/60 rounded-lg p-3 text-gray-100 text-sm focus:ring-violet-400 focus:border-transparent outline-none h-[48px] transition"> 
-                        <option value="friendly">Friendly</option>
-                        <option value="sage">Sage</option>
-                        <option value="coding">Coding</option>
-                        <option value="sarcastic">Sarcastic</option>
-                        <option value="scifi">Sci-Fi</option>
-                    </select>
+            <div id="typing-indicator" class="h-6 mb-1 text-sm text-violet-300 italic text-center" style="display: none;">Ei is typing...</div>
+            
+            <div class="flex-shrink-0 pb-3 pt-2">
+                <div class="flex items-end space-x-2 sm:space-x-3">
+                    <div class="hidden sm:block">
+                        <select id="persona-quick-select" class="bg-slate-800/80 border border-violet-700/60 rounded-lg p-3 text-gray-100 text-sm focus:ring-violet-400 focus:border-transparent outline-none h-[48px] transition"> 
+                            <option value="friendly">Friendly</option>
+                            <option value="sage">Sage</option>
+                            <option value="coding">Coding</option>
+                            <option value="sarcastic">Sarcastic</option>
+                            <option value="scifi">Sci-Fi</option>
+                        </select>
+                    </div>
+                    <form id="chat-form" class="flex-grow flex items-center space-x-2 sm:space-x-3">
+                        <input type="text" id="message-input" placeholder="Whisper your thoughts to Ei..." class="flex-grow p-3 bg-slate-800/80 border border-violet-700/60 rounded-lg focus:ring-2 focus:ring-violet-400 outline-none placeholder-violet-300/70 text-gray-100 shadow-md h-[48px] transition">
+                        <button type="submit" id="send-button" class="p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow-md transition-colors duration-150 h-[48px] flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path d="M3.105 3.105a1.5 1.5 0 012.122-.001L19.43 11.192a.75.75 0 010 1.116L5.227 16.9a1.5 1.5 0 01-2.122-.001 1.5 1.5 0 01-.001-2.122L14.192 11.75 3.105 5.227a1.5 1.5 0 01-.001-2.122z" /></svg>
+                        </button>
+                    </form>
                 </div>
-    
-                <form id="chat-form" class="flex-grow flex items-center space-x-2 sm:space-x-3">
-                    <input type="text" id="message-input" placeholder="Whisper your thoughts to Ei..." class="flex-grow p-3 bg-slate-800/80 border border-violet-700/60 rounded-lg focus:ring-2 focus:ring-violet-400 outline-none placeholder-violet-300/70 text-gray-100 shadow-md h-[48px] transition">
-                    <button type="submit" id="send-button" class="p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-lg shadow-md transition-colors duration-150 h-[48px] flex-shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-6 h-6"><path d="M3.105 3.105a1.5 1.5 0 012.122-.001L19.43 11.192a.75.75 0 010 1.116L5.227 16.9a1.5 1.5 0 01-2.122-.001 1.5 1.5 0 01-.001-2.122L14.192 11.75 3.105 5.227a1.5 1.5 0 01-.001-2.122z" /></svg>
-                    </button>
-                </form>
             </div>
         </div>
     </div> 
 
     <script src="/static/js/main.js"></script>
     <script>
-    // This script remains the same as it correctly handles particle animations.
     document.addEventListener('DOMContentLoaded', () => {
         const canvas = document.getElementById('particle-canvas');
         if (!canvas) return;

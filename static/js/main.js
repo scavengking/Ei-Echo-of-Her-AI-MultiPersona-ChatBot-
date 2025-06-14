@@ -25,19 +25,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const personaCards = document.querySelectorAll('.persona-card');
     const continueToChatBtn = document.getElementById('continue-to-chat-btn');
     const closePersonaBtn = document.getElementById('close-persona-btn');
+    const appLoading = document.getElementById('app-loading');
 
     if (!chatForm) {
         console.log("Not on the main chat page. main.js will not run.");
+        if (appLoading) appLoading.style.display = 'none';
         return;
     }
 
     // --- STATE VARIABLES ---
     const LS_PERSONA_KEY = 'ei_selected_persona';
     const LS_SESSION_ID_KEY = 'ei_current_session_id';
-    const LS_PERSONA_INTRO_KEY = 'ei_has_seen_persona_intro_v1'; // We use this to track first selection
-
-    let currentPersona = localStorage.getItem(LS_PERSONA_KEY) || 'friendly';
-    let currentSessionId = localStorage.getItem(LS_SESSION_ID_KEY);
+    
+    let currentPersona = getLocalStorage(LS_PERSONA_KEY) || 'friendly';
+    let currentSessionId = getLocalStorage(LS_SESSION_ID_KEY);
     let latestRequestTimestamp = 0;
     
     let userProfile = {
@@ -47,6 +48,24 @@ document.addEventListener('DOMContentLoaded', () => {
         subscription_status: 'none'
     };
     let currentUserLevel = 1;
+    
+    // --- SAFE LOCALSTORAGE FUNCTIONS ---
+    function getLocalStorage(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            console.error("LocalStorage access error:", e);
+            return null;
+        }
+    }
+
+    function setLocalStorage(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            console.error("LocalStorage set error:", e);
+        }
+    }
 
     // --- BADGE DEFINITIONS & GAMIFICATION STATE ---
     const XP_PER_MESSAGE = 15;
@@ -62,15 +81,12 @@ document.addEventListener('DOMContentLoaded', () => {
         personaVirtuoso: { id: 'personaVirtuoso', name: 'Persona Virtuoso', description: "Experienced all primary facets of Ei (all 5 personas tried).", emoji: '🌟', unlocked: false }
     };
 
-    // --- CORRECTED PERSONA OVERLAY LOGIC ---
+    // --- PERSONA OVERLAY LOGIC ---
     function setupPersonaOverlay() {
         let selectedPersona = currentPersona;
         
-        // Set initial active card
         personaCards.forEach(card => {
-            if (card.dataset.persona === selectedPersona) {
-                card.classList.add('active');
-            }
+            if (card.dataset.persona === selectedPersona) card.classList.add('active');
         });
 
         personaCards.forEach(card => {
@@ -81,11 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // Close button listener
         if(closePersonaBtn) {
             closePersonaBtn.addEventListener('click', () => {
-                // Only allow closing if a persona has been chosen before
-                if (localStorage.getItem(LS_PERSONA_KEY)) {
+                if (getLocalStorage(LS_PERSONA_KEY)) {
                     personaOverlay.classList.remove('visible');
                 } else {
                     alert("Please select a persona to continue.");
@@ -93,30 +107,24 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Continue button listener
         continueToChatBtn.addEventListener('click', () => {
             currentPersona = selectedPersona;
-            localStorage.setItem(LS_PERSONA_KEY, currentPersona);
+            setLocalStorage(LS_PERSONA_KEY, currentPersona);
             if (personaQuickSelect) personaQuickSelect.value = currentPersona;
             
-            // This key is for badge logic, not for showing the panel
-            localStorage.setItem(LS_PERSONA_INTRO_KEY, 'true'); 
             personaOverlay.classList.remove('visible');
 
-            // Log persona usage for badges
-            let personasTried = JSON.parse(localStorage.getItem('ei_personas_tried_v2') || '[]');
+            let personasTried = JSON.parse(getLocalStorage('ei_personas_tried_v2') || '[]');
             if (!personasTried.includes(currentPersona)) {
                 personasTried.push(currentPersona);
-                localStorage.setItem('ei_personas_tried_v2', JSON.stringify(personasTried));
+                setLocalStorage('ei_personas_tried_v2', JSON.stringify(personasTried));
             }
             checkAndAwardBadges();
         });
 
-        // Escape key to close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && personaOverlay.classList.contains('visible')) {
-                // Only allow closing if a persona has been chosen before
-                 if (localStorage.getItem(LS_PERSONA_KEY)) {
+                 if (getLocalStorage(LS_PERSONA_KEY)) {
                     personaOverlay.classList.remove('visible');
                 }
             }
@@ -126,22 +134,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CORRECTED INITIALIZATION LOGIC ---
     async function initializeApp() {
         try {
+            const hasSelectedPersona = getLocalStorage(LS_PERSONA_KEY);
+            
             const response = await fetch('/get_user_profile');
             if (!response.ok) {
                 window.location.href = '/auth';
                 return;
             }
+            
             userProfile = await response.json();
             
             if (usernameDisplay) usernameDisplay.textContent = userProfile.username;
             updateSubscriptionStatusUI(userProfile.subscription_status);
-            
             updateBadgeUnlockStatus();
             recalculateLevelFromXP();
             updateXPDisplay();
             displayEarnedBadges();
 
             if (personaQuickSelect) personaQuickSelect.value = currentPersona;
+            
+            setupPersonaOverlay();
+            
+            if (!hasSelectedPersona) {
+                setTimeout(() => {
+                    personaOverlay.classList.add('visible');
+                }, 300);
+            }
             
             await loadChatSessions();
             
@@ -151,23 +169,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 startNewChatSession(false);
             }
             
-            // Always setup the listeners for the persona panel
-            setupPersonaOverlay();
-            
-            // Show the persona overlay IF no persona has EVER been selected
-            if (!localStorage.getItem(LS_PERSONA_KEY)) {
-                personaOverlay.classList.add('visible');
-            }
-            
             anime({ targets: '#main-content-area', opacity: [0, 1], duration: 800, easing: 'easeInExpo' });
 
         } catch (error) {
             console.error("Initialization failed:", error);
             window.location.href = '/auth';
+        } finally {
+            if (appLoading) appLoading.style.display = 'none';
         }
     }
 
-    // --- ALL OTHER FUNCTIONS (No Changes) ---
+    // --- ALL OTHER FUNCTIONS ---
 
     function updateBadgeUnlockStatus() {
         userProfile.badges.forEach(badgeId => {
@@ -251,7 +263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkAndAwardBadges() {
-        const personasTried = JSON.parse(localStorage.getItem('ei_personas_tried_v2') || '[]');
+        const personasTried = JSON.parse(getLocalStorage('ei_personas_tried_v2') || '[]');
         const totalMessages = document.querySelectorAll('.user-bubble').length;
         const sessionCount = historyList.children.length;
 
@@ -259,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (personasTried.length >= 2) awardBadge('curiousMind');
         if (currentUserLevel >= 2) awardBadge('level2Reached');
         if (sessionCount >= 3) awardBadge('sessionWeaver');
-        if (localStorage.getItem('ei_has_viewed_history_v2') === 'true') awardBadge('timeTraveler');
+        if (getLocalStorage('ei_has_viewed_history_v2') === 'true') awardBadge('timeTraveler');
         if (totalMessages >= 25) awardBadge('dedicatedListener');
         if (ALL_PERSONA_IDS.every(id => personasTried.includes(id))) awardBadge('personaVirtuoso');
     }
@@ -275,7 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startNewChatSession(loadHistory = true) {
         currentSessionId = uuid.v4();
-        localStorage.setItem(LS_SESSION_ID_KEY, currentSessionId);
+        setLocalStorage(LS_SESSION_ID_KEY, currentSessionId);
         if (chatMessagesContainer) chatMessagesContainer.innerHTML = '';
         showTypingIndicator(false);
         showEmptySessionPlaceholder(true);
@@ -333,8 +345,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function switchSession(sessionId) {
         if (currentSessionId !== sessionId) {
             currentSessionId = sessionId;
-            localStorage.setItem(LS_SESSION_ID_KEY, currentSessionId);
-            localStorage.setItem('ei_has_viewed_history_v2', 'true');
+            setLocalStorage(LS_SESSION_ID_KEY, currentSessionId);
+            setLocalStorage('ei_has_viewed_history_v2', 'true');
             checkAndAwardBadges();
             loadChatHistoryForSession(currentSessionId);
             updateActiveSessionInPanel(currentSessionId);
@@ -418,11 +430,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     personaQuickSelect.addEventListener('change', function() {
         currentPersona = this.value;
-        localStorage.setItem(LS_PERSONA_KEY, currentPersona);
-        let personasTried = JSON.parse(localStorage.getItem('ei_personas_tried_v2') || '[]');
+        setLocalStorage(LS_PERSONA_KEY, currentPersona);
+        let personasTried = JSON.parse(getLocalStorage('ei_personas_tried_v2') || '[]');
         if (!personasTried.includes(currentPersona)) {
             personasTried.push(currentPersona);
-            localStorage.setItem('ei_personas_tried_v2', JSON.stringify(personasTried));
+            setLocalStorage('ei_personas_tried_v2', JSON.stringify(personasTried));
         }
         checkAndAwardBadges();
     });
