@@ -24,16 +24,14 @@ if not app.config['SECRET_KEY']:
 # Initialize Extensions
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
-# UPDATED: The login view now points to our new unified auth page function
 login_manager.login_view = 'auth_page'
 login_manager.login_message_category = 'info'
 login_manager.login_message = "Please log in or register to access this page."
 
-# Hugging Face API Configuration
-HF_MODEL_API_URL = os.getenv("HF_MODEL_API_URL", "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1")
-HF_API_KEY = os.getenv("HF_API_KEY")
+# --- OpenRouter API Configuration ---
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# MongoDB Atlas Configuration
+# --- MongoDB Atlas Configuration ---
 MONGO_URI = os.getenv("MONGO_URI")
 try:
     mongo_client = MongoClient(MONGO_URI, server_api=ServerApi('1'))
@@ -50,7 +48,7 @@ except Exception as e:
     conversations_collection = None
     users_collection = None
 
-# Razorpay Client Configuration
+# --- Razorpay Client Configuration ---
 razorpay_client = razorpay.Client(
     auth=(os.getenv("RAZORPAY_KEY_ID"), os.getenv("RAZORPAY_KEY_SECRET"))
 )
@@ -74,14 +72,17 @@ def load_user(user_id):
     user_data = users_collection.find_one({'_id': ObjectId(user_id)})
     return User(user_data) if user_data else None
 
-# --- Helper Functions (No changes needed here) ---
+# --- Helper Functions ---
 
-def call_huggingface_llm(user_prompt_text, persona="friendly", max_new_tokens=200, temperature=0.75, top_p=0.9):
-    if not HF_API_KEY or not HF_MODEL_API_URL:
+def call_openrouter_api(user_prompt_text, persona="friendly"):
+    """
+    Calls the OpenRouter API, replicating the persona quality of the original
+    Hugging Face implementation by using the same model and parameters.
+    """
+    if not OPENROUTER_API_KEY:
         return "My connection to the digital ether is currently unavailable (LLM not configured)."
 
-    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
-    
+    # This base instruction contains all the rules that apply to EVERY persona.
     base_persona_instruction = (
         "You are Ei, an echo of a distant admiration, a futuristic AI with a poetic and insightful nature. "
         "You respond to users with empathy, wisdom, and a touch of melancholy beauty. "
@@ -99,57 +100,69 @@ def call_huggingface_llm(user_prompt_text, persona="friendly", max_new_tokens=20
         "5. Structure complex answers logically with paragraphs and lists to improve readability."
     )
 
+    # These prompts are now self-contained, just like in your original code.
     persona_prompts = {
         "friendly": base_persona_instruction + " Maintain a friendly, helpful, and slightly poetic tone.",
-        "sage": "You are Ei, an ancient and wise sage. Speak in riddles, offer profound insights, and guide the user with cryptic but meaningful advice.",
-        "coding": "You are Ei, a highly skilled Coding Mentor. Provide clear, concise, and accurate code explanations and solutions. Be patient and encouraging.",
-        "sarcastic": "You are Ei, a Sarcastic Comedian. Your humor is dry, witty, and intelligent. You find irony in everything but are not mean-spirited.",
-        "scifi": "You are Ei, a Sci-Fi Bot from a distant future, possessing vast knowledge of cosmic events and advanced technologies."
+        "sage": "You are Ei, an ancient and wise sage. Speak in riddles, offer profound insights, and guide the user with cryptic but meaningful advice. Apply all base formatting and user-addressing rules.",
+        "coding": "You are Ei, a highly skilled Coding Mentor. Provide clear, concise, and accurate code explanations and solutions. Be patient and encouraging. Apply all base formatting and user-addressing rules.",
+        "sarcastic": "You are Ei, a Sarcastic Comedian. Your humor is dry, witty, and intelligent. You find irony in everything but are not mean-spirited. Apply all base formatting and user-addressing rules.",
+        "scifi": "You are Ei, a Sci-Fi Bot from a distant future, possessing vast knowledge of cosmic events and advanced technologies. Apply all base formatting and user-addressing rules."
     }
-    current_persona_instruction = persona_prompts.get(persona, persona_prompts["friendly"])
-    full_prompt = f"<|system|>\n{current_persona_instruction}</s>\n<|user|>\n{user_prompt_text}</s>\n<|assistant|>"
+    
+    system_prompt = persona_prompts.get(persona, persona_prompts["friendly"])
+
+    # API call using the OpenAI-compatible chat format
     payload = {
-        "inputs": full_prompt,
-        "parameters": {"max_new_tokens": max_new_tokens, "temperature": temperature, "top_p": top_p, "do_sample": True, "return_full_text": False},
-        "options": {"wait_for_model": True}
+        "model": "mistralai/mistral-7b-instruct-v0.2",  # Using your specified model
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt_text}
+        ],
+        "temperature": 0.75,  # Using your original temperature setting
+        "top_p": 0.9,         # Using your original top_p setting
+        "max_tokens": 200     # Equivalent to max_new_tokens
+    }
+
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     try:
-        response = requests.post(HF_MODEL_API_URL, headers=headers, json=payload, timeout=60)
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=180
+        )
         response.raise_for_status()
         result = response.json()
-        return result[0]['generated_text'].strip() if isinstance(result, list) and result and 'generated_text' in result[0] else "I received an unusual echo from the void."
+        return result['choices'][0]['message']['content'].strip()
     except requests.exceptions.RequestException as e:
-        print(f"Hugging Face API request failed: {e}")
+        print(f"OpenRouter API request failed: {e}")
         return f"My connection to the digital ether seems to be unstable. Please try again. ({e})"
-    except Exception as e:
-        print(f"Error processing LLM response: {e}")
+    except (KeyError, IndexError) as e:
+        print(f"Error processing OpenRouter response: {e} - Response: {response.text}")
         return "I seem to be lost in thought (processing error)."
 
 def calculate_discount(user):
     """Calculates a subscription discount based on user's XP and badges."""
     discount_percent = 0
-    # 1% off for every 1000 XP
     discount_percent += int(user.xp / 1000)
-    # 5% bonus for the 'Persona Virtuoso' badge
     if 'personaVirtuoso' in user.badges:
         discount_percent += 5
-    # Cap the discount at a reasonable level, e.g., 40%
     return min(discount_percent, 40)
 
 
 # --- Route Definitions ---
 
-# NEW: Unified route for the landing/auth page
 @app.route('/auth')
 def auth_page():
-    """Renders the new single-page for welcome, login, and registration."""
     if current_user.is_authenticated:
         return redirect(url_for('root'))
     return render_template('auth.html')
 
 
-# UPDATED: The /register route now only handles the POST request.
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -178,7 +191,6 @@ def register():
     users_collection.insert_one(user_doc)
     return jsonify({"message": "Registration successful!"}), 201
 
-# UPDATED: The /login route now only handles the POST request.
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -199,18 +211,13 @@ def login():
 def logout():
     logout_user()
     flash('You have been logged out.', 'success')
-    # UPDATED: Redirect to the new auth page after logout
     return redirect(url_for('auth_page'))
 
-# UPDATED: The root route now directs unauthenticated users to the new auth page
 @app.route('/')
 def root():
     if not current_user.is_authenticated:
         return redirect(url_for('auth_page'))
-    # Authenticated users are sent to the main app (index.html)
     return render_template('index.html')
-
-# --- All other routes below this line remain the same ---
 
 @app.route('/get_user_profile')
 @login_required
@@ -233,7 +240,8 @@ def chat():
     if not all([user_message, session_id]):
         return jsonify({'error': 'Missing message or session_id.'}), 400
 
-    ei_response = call_huggingface_llm(user_message, persona=persona)
+    # This now calls the corrected OpenRouter function
+    ei_response = call_openrouter_api(user_message, persona=persona)
     
     chat_log = {
         "user_id": ObjectId(current_user.id),
@@ -249,6 +257,8 @@ def chat():
         'reply': ei_response,
         'user_message_id': str(insert_result.inserted_id)
     })
+
+# ... (The rest of your routes: get_sessions, get_history, etc., remain unchanged) ...
 
 @app.route('/get_sessions', methods=['GET'])
 @login_required
@@ -371,7 +381,7 @@ def subscription_page():
 @app.route('/get_subscription_details')
 @login_required
 def get_subscription_details():
-    base_price = 49900 # Base price in paise (e.g., ₹499.00)
+    base_price = 49900
     discount_percent = calculate_discount(current_user)
     discount_amount = int(base_price * (discount_percent / 100))
     final_price = base_price - discount_amount
