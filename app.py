@@ -30,7 +30,7 @@ login_manager.login_message_category = 'info'
 login_manager.login_message = "Please log in or register to access this page."
 
 # Hugging Face API Configuration
-HF_MODEL_API_URL = os.getenv("HF_MODEL_API_URL", "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta")
+HF_MODEL_API_URL = os.getenv("HF_MODEL_API_URL", "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1")
 HF_API_KEY = os.getenv("HF_API_KEY")
 
 # MongoDB Atlas Configuration
